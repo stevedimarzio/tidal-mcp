@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+      "TIDAL Integration": {
+        "command": "/Users/steve/Projects/tidal-mcp/.venv/bin/python",
+        "env": {
+          "TIDAL_MCP_PORT": "5100"
+        },
+        "args": ["/Users/steve/Projects/tidal-mcp/start_mcp.py"]
+      }
+    }
+  }

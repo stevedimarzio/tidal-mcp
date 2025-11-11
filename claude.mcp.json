@@ -1,0 +1,24 @@
+{
+    "mcpServers": {
+      "TIDAL Integration": {
+        "command": "/opt/homebrew/bin/uv",
+        "env": {
+          "TIDAL_MCP_PORT": "5100"
+        },
+        "args": [
+          "run",
+          "--with",
+          "requests",
+          "--with",
+          "mcp[cli]",
+          "--with",
+          "flask",
+          "--with",
+          "tidalapi",
+          "mcp",
+          "run",
+          "/Users/steve/Projects/tidal-mcp/mcp_server/server.py"
+        ]
+      }
+    }
+  }
