@@ -5,12 +5,80 @@ import functools
 from flask import Flask, request, jsonify
 from pathlib import Path
 
+# Ensure SSL certificates are available
+# This fixes issues with uv environments where certifi path might be invalid
+import ssl
+import sys
+
+def configure_ssl_certificates():
+    """Configure SSL certificates, handling uv environment issues."""
+    try:
+        import certifi
+        cert_path = certifi.where()
+        
+        # Verify the certificate file actually exists
+        if os.path.exists(cert_path):
+            # Set default SSL context to use certifi's certificate bundle
+            ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=cert_path)
+            # Also set environment variable for requests library
+            os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+            os.environ['SSL_CERT_FILE'] = cert_path
+            return True
+        else:
+            # Certificate file doesn't exist at expected path
+            # Try to find certifi in the actual Python environment
+            import site
+            for site_packages in site.getsitepackages():
+                potential_path = os.path.join(site_packages, 'certifi', 'cacert.pem')
+                if os.path.exists(potential_path):
+                    ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=potential_path)
+                    os.environ['REQUESTS_CA_BUNDLE'] = potential_path
+                    os.environ['SSL_CERT_FILE'] = potential_path
+                    print(f"Using certifi from: {potential_path}")
+                    return True
+            
+            # If we can't find certifi, use system certificates
+            print(f"Warning: certifi certificate bundle not found at {cert_path}, using system certificates")
+            # Use default context which should use system certificates
+            # This works on macOS and most Linux distributions
+            ssl._create_default_https_context = ssl.create_default_context
+            print("Using system SSL certificates")
+            return True
+            
+    except ImportError:
+        # certifi not available, use system defaults
+        print("Warning: certifi not available, using system SSL certificates")
+        return False
+    except Exception as e:
+        print(f"Warning: Could not configure SSL certificates: {e}, using system defaults")
+        return False
+
+# Configure SSL before importing anything that uses HTTPS
+configure_ssl_certificates()
+
 from browser_session import BrowserSession
 from utils import format_track_data, bound_limit
 
 app = Flask(__name__)
-token_path = os.path.join(tempfile.gettempdir(), 'tidal-session-oauth.json')
-SESSION_FILE = Path(token_path)
+
+# Use a more persistent location for session file
+# Prefer user's home directory, fallback to temp directory
+def get_session_file_path() -> Path:
+    """Get the path to the TIDAL session file."""
+    # Try to use user's home directory first
+    home_dir = os.path.expanduser("~")
+    config_dir = os.path.join(home_dir, ".tidal-mcp")
+    
+    # Create config directory if it doesn't exist
+    try:
+        os.makedirs(config_dir, exist_ok=True, mode=0o700)  # Private directory
+        return Path(config_dir) / "session.json"
+    except (OSError, PermissionError):
+        # Fallback to temp directory if we can't create config directory
+        temp_dir = tempfile.gettempdir()
+        return Path(temp_dir) / "tidal-session-oauth.json"
+
+SESSION_FILE = get_session_file_path()
 
 def requires_tidal_auth(f):
     """
@@ -124,11 +192,35 @@ def get_tracks(session: BrowserSession):
         # Get limit from query parameter, default to 10 if not specified
         limit = bound_limit(request.args.get('limit', default=10, type=int))
         
-        tracks = favorites.tracks(limit=limit, order="DATE", order_direction="DESC")        
-        track_list = [format_track_data(track) for track in tracks]
+        # Get tracks - handle both iterator and list cases
+        try:
+            tracks = favorites.tracks(limit=limit, order="DATE", order_direction="DESC")
+            # Convert to list if it's an iterator
+            if hasattr(tracks, '__iter__') and not isinstance(tracks, (list, tuple, str)):
+                tracks = list(tracks)
+        except Exception as e:
+            # Try without order parameters
+            try:
+                tracks = favorites.tracks(limit=limit)
+                if hasattr(tracks, '__iter__') and not isinstance(tracks, (list, tuple, str)):
+                    tracks = list(tracks)
+            except Exception as e2:
+                return jsonify({"error": f"Error fetching tracks: {str(e2)} (original: {str(e)})"}), 500
+        
+        # Format tracks with error handling
+        track_list = []
+        for track in tracks:
+            try:
+                track_list.append(format_track_data(track))
+            except Exception as e:
+                print(f"Error formatting track: {e}")
+                continue
 
         return jsonify({"tracks": track_list})
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in get_tracks: {error_details}")
         return jsonify({"error": f"Error fetching tracks: {str(e)}"}), 500
     
     

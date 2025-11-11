@@ -9,13 +9,44 @@ def format_track_data(track, source_track_id=None):
     Returns:
         Dictionary with standardized track information
     """
+    # Safely get artist name
+    artist_name = "Unknown"
+    try:
+        if hasattr(track, 'artist') and track.artist:
+            if hasattr(track.artist, 'name'):
+                artist_name = track.artist.name
+            elif isinstance(track.artist, str):
+                artist_name = track.artist
+            elif hasattr(track.artist, '__str__'):
+                artist_name = str(track.artist)
+    except (AttributeError, TypeError):
+        pass
+    
+    # Safely get album name
+    album_name = "Unknown"
+    try:
+        if hasattr(track, 'album') and track.album:
+            if hasattr(track.album, 'name'):
+                album_name = track.album.name
+            elif isinstance(track.album, str):
+                album_name = track.album
+            elif hasattr(track.album, '__str__'):
+                album_name = str(track.album)
+    except (AttributeError, TypeError):
+        pass
+    
+    # Safely get track ID and name
+    track_id = getattr(track, 'id', None)
+    track_name = getattr(track, 'name', 'Unknown Track')
+    duration = getattr(track, 'duration', 0)
+    
     track_data = {
-        "id": track.id,
-        "title": track.name,
-        "artist": track.artist.name if hasattr(track.artist, 'name') else "Unknown",
-        "album": track.album.name if hasattr(track.album, 'name') else "Unknown",
-        "duration": track.duration if hasattr(track, 'duration') else 0,
-        "url": f"https://tidal.com/browse/track/{track.id}?u"
+        "id": track_id,
+        "title": track_name,
+        "artist": artist_name,
+        "album": album_name,
+        "duration": duration,
+        "url": f"https://tidal.com/browse/track/{track_id}?u" if track_id else None
     }
     
     # Include source track ID if provided

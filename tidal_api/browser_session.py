@@ -1,7 +1,41 @@
 import webbrowser
+import os
+import ssl
+import sys
+
+# Configure SSL certificates before importing tidalapi
+# This fixes issues with uv environments where certifi path might be invalid
+def configure_ssl_for_tidalapi():
+    """Configure SSL certificates for tidalapi library."""
+    try:
+        import certifi
+        cert_path = certifi.where()
+        if os.path.exists(cert_path):
+            # Set environment variables for requests (used by tidalapi)
+            os.environ['REQUESTS_CA_BUNDLE'] = cert_path
+            os.environ['SSL_CERT_FILE'] = cert_path
+            # Also configure default SSL context
+            ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=cert_path)
+        else:
+            # Certificate file doesn't exist, use system certificates
+            print(f"Warning: certifi certificate bundle not found at {cert_path}, using system certificates")
+            # Use default context which should use system certificates
+            ssl._create_default_https_context = ssl.create_default_context
+    except ImportError:
+        # certifi not available, use system defaults
+        print("Warning: certifi not available, using system SSL certificates")
+        ssl._create_default_https_context = ssl.create_default_context
+    except Exception as e:
+        print(f"Warning: Could not configure SSL certificates: {e}, using system defaults")
+        ssl._create_default_https_context = ssl.create_default_context
+
+# Configure SSL before importing tidalapi
+configure_ssl_for_tidalapi()
+
 import tidalapi
 from typing import Callable, Optional
 from pathlib import Path
+import concurrent.futures
 
 class BrowserSession(tidalapi.Session):
     """
@@ -25,10 +59,21 @@ class BrowserSession(tidalapi.Session):
         auth_url = login.verification_uri_complete
         if not auth_url.startswith('http'):
             auth_url = 'https://' + auth_url
-        webbrowser.open(auth_url)
         
-        # Wait for the authentication to complete
-        future.result()
+        # Try to open browser, but continue even if it fails
+        try:
+            webbrowser.open(auth_url)
+        except Exception as e:
+            fn_print(f"Warning: Could not open browser automatically: {e}")
+            fn_print(f"Please visit this URL manually: {auth_url}")
+        
+        # Wait for the authentication to complete with timeout
+        # Use expires_in + small buffer (10 seconds) as timeout
+        timeout = login.expires_in + 10
+        try:
+            future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            raise TimeoutError(f"Login timed out after {timeout} seconds. Please try again.")
     
     def login_session_file_auto(
         self,
@@ -45,18 +90,33 @@ class BrowserSession(tidalapi.Session):
         :param fn_print: A function to display information
         :return: Returns true if the login was successful
         """
-        self.load_session_from_file(session_file)
+        # Try to load existing session file, but handle errors gracefully
+        if session_file.exists():
+            try:
+                self.load_session_from_file(session_file)
+            except (FileNotFoundError, ValueError, KeyError, Exception) as e:
+                fn_print(f"Could not load existing session file: {e}")
+                fn_print("Will create a new session...")
 
         # Session could not be loaded, attempt to create a new session
         if not self.check_login():
-            if do_pkce:
-                fn_print("Creating new session (PKCE)...")
-                self.login_pkce(fn_print=fn_print)
-            else:
-                fn_print("Creating new session (OAuth)...")
-                self.login_oauth_simple(fn_print=fn_print)
+            try:
+                if do_pkce:
+                    fn_print("Creating new session (PKCE)...")
+                    self.login_pkce(fn_print=fn_print)
+                else:
+                    fn_print("Creating new session (OAuth)...")
+                    self.login_oauth_simple(fn_print=fn_print)
+            except TimeoutError as e:
+                fn_print(f"Login timed out: {e}")
+                return False
+            except Exception as e:
+                fn_print(f"Login failed: {e}")
+                return False
 
         if self.check_login():
+            # Ensure session file directory exists
+            session_file.parent.mkdir(parents=True, exist_ok=True)
             fn_print(f"TIDAL Login OK, creds saved in {str(session_file)}")
             self.save_session_to_file(session_file)
             return True

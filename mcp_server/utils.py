@@ -59,8 +59,10 @@ def start_flask_app():
     print(f"Using uv executable: {uv_executable}")
     
     # Start the Flask app using uv
+    # Include certifi to ensure SSL certificates are available
     flask_process = subprocess.Popen([
         uv_executable, "run",
+        "--with", "certifi",
         "--with", "tidalapi",
         "--with", "flask",
         "--with", "requests",

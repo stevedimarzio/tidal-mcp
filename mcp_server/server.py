@@ -4,7 +4,7 @@ import atexit
 
 from typing import Optional, List
 
-from utils import start_flask_app, shutdown_flask_app, FLASK_APP_URL, FLASK_PORT
+from .utils import start_flask_app, shutdown_flask_app, FLASK_APP_URL, FLASK_PORT
 
 # Print the port being used for debugging
 print(f"TIDAL MCP starting on port {FLASK_PORT}")
