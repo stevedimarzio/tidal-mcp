@@ -55,6 +55,68 @@ def format_track_data(track, source_track_id=None):
         
     return track_data
 
+def format_album_data(album):
+    """
+    Format an album object into a standardized dictionary.
+    
+    Args:
+        album: TIDAL album object
+        
+    Returns:
+        Dictionary with standardized album information
+    """
+    # Safely get artist name
+    artist_name = "Unknown"
+    try:
+        if hasattr(album, 'artist') and album.artist:
+            if hasattr(album.artist, 'name'):
+                artist_name = album.artist.name
+            elif isinstance(album.artist, str):
+                artist_name = album.artist
+            elif hasattr(album.artist, '__str__'):
+                artist_name = str(album.artist)
+    except (AttributeError, TypeError):
+        pass
+    
+    album_id = getattr(album, 'id', None)
+    album_name = getattr(album, 'name', 'Unknown Album')
+    release_date = getattr(album, 'release_date', None)
+    duration = getattr(album, 'duration', 0)
+    num_tracks = getattr(album, 'num_tracks', 0)
+    
+    album_data = {
+        "id": album_id,
+        "title": album_name,
+        "artist": artist_name,
+        "release_date": release_date,
+        "duration": duration,
+        "num_tracks": num_tracks,
+        "url": f"https://tidal.com/browse/album/{album_id}?u" if album_id else None
+    }
+    
+    return album_data
+
+def format_artist_data(artist):
+    """
+    Format an artist object into a standardized dictionary.
+    
+    Args:
+        artist: TIDAL artist object
+        
+    Returns:
+        Dictionary with standardized artist information
+    """
+    artist_id = getattr(artist, 'id', None)
+    artist_name = getattr(artist, 'name', 'Unknown Artist')
+    
+    artist_data = {
+        "id": artist_id,
+        "name": artist_name,
+        "url": f"https://tidal.com/browse/artist/{artist_id}?u" if artist_id else None
+    }
+    
+    return artist_data
+
 def bound_limit(limit: int, max_n: int = 50) -> int:
     # Ensure limit is within reasonable bounds
     if limit < 1:

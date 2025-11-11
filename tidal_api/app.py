@@ -57,7 +57,7 @@ def configure_ssl_certificates():
 configure_ssl_certificates()
 
 from browser_session import BrowserSession
-from utils import format_track_data, bound_limit
+from utils import format_track_data, format_album_data, format_artist_data, bound_limit
 
 app = Flask(__name__)
 
@@ -472,6 +472,176 @@ def delete_playlist(playlist_id: str, session: BrowserSession):
         
     except Exception as e:
         return jsonify({"error": f"Error deleting playlist: {str(e)}"}), 500
+
+
+@app.route('/api/search', methods=['GET'])
+@requires_tidal_auth
+def search(session: BrowserSession):
+    """
+    Search for tracks, albums, and artists on TIDAL.
+    
+    Query parameters:
+    - q: Search query (required)
+    - limit: Maximum number of results per type (default: 20, max: 50)
+    - types: Comma-separated list of types to search (tracks, albums, artists). Default: all
+    """
+    try:
+        import tidalapi
+        
+        # Get search query
+        query = request.args.get('q')
+        if not query:
+            return jsonify({"error": "Missing required parameter 'q' (search query)"}), 400
+        
+        # Get limit
+        limit = bound_limit(request.args.get('limit', default=20, type=int))
+        
+        # Get types to search (default: all)
+        types_param = request.args.get('types', 'tracks,albums,artists')
+        types_list = [t.strip().lower() for t in types_param.split(',')]
+        
+        # Determine which models to search
+        models = []
+        if 'tracks' in types_list:
+            models.append(tidalapi.Track)
+        if 'albums' in types_list:
+            models.append(tidalapi.Album)
+        if 'artists' in types_list:
+            models.append(tidalapi.Artist)
+        
+        if not models:
+            return jsonify({"error": "Invalid types. Must include at least one of: tracks, albums, artists"}), 400
+        
+        # Perform search
+        results = session.search(query, models=models, limit=limit)
+        
+        # Format results
+        formatted_results = {}
+        
+        if 'tracks' in types_list and 'tracks' in results:
+            formatted_results['tracks'] = [format_track_data(track) for track in results['tracks']]
+        
+        if 'albums' in types_list and 'albums' in results:
+            formatted_results['albums'] = [format_album_data(album) for album in results['albums']]
+        
+        if 'artists' in types_list and 'artists' in results:
+            formatted_results['artists'] = [format_artist_data(artist) for artist in results['artists']]
+        
+        return jsonify({
+            "query": query,
+            "results": formatted_results,
+            "total_tracks": len(formatted_results.get('tracks', [])),
+            "total_albums": len(formatted_results.get('albums', [])),
+            "total_artists": len(formatted_results.get('artists', []))
+        })
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in search: {error_details}")
+        return jsonify({"error": f"Error performing search: {str(e)}"}), 500
+
+
+@app.route('/api/search/tracks', methods=['GET'])
+@requires_tidal_auth
+def search_tracks(session: BrowserSession):
+    """
+    Search for tracks on TIDAL.
+    
+    Query parameters:
+    - q: Search query (required)
+    - limit: Maximum number of results (default: 20, max: 50)
+    """
+    try:
+        import tidalapi
+        
+        query = request.args.get('q')
+        if not query:
+            return jsonify({"error": "Missing required parameter 'q' (search query)"}), 400
+        
+        limit = bound_limit(request.args.get('limit', default=20, type=int))
+        
+        results = session.search(query, models=[tidalapi.Track], limit=limit)
+        
+        tracks = results.get('tracks', [])
+        formatted_tracks = [format_track_data(track) for track in tracks]
+        
+        return jsonify({
+            "query": query,
+            "tracks": formatted_tracks,
+            "total": len(formatted_tracks)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error searching tracks: {str(e)}"}), 500
+
+
+@app.route('/api/search/albums', methods=['GET'])
+@requires_tidal_auth
+def search_albums(session: BrowserSession):
+    """
+    Search for albums on TIDAL.
+    
+    Query parameters:
+    - q: Search query (required)
+    - limit: Maximum number of results (default: 20, max: 50)
+    """
+    try:
+        import tidalapi
+        
+        query = request.args.get('q')
+        if not query:
+            return jsonify({"error": "Missing required parameter 'q' (search query)"}), 400
+        
+        limit = bound_limit(request.args.get('limit', default=20, type=int))
+        
+        results = session.search(query, models=[tidalapi.Album], limit=limit)
+        
+        albums = results.get('albums', [])
+        formatted_albums = [format_album_data(album) for album in albums]
+        
+        return jsonify({
+            "query": query,
+            "albums": formatted_albums,
+            "total": len(formatted_albums)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error searching albums: {str(e)}"}), 500
+
+
+@app.route('/api/search/artists', methods=['GET'])
+@requires_tidal_auth
+def search_artists(session: BrowserSession):
+    """
+    Search for artists on TIDAL.
+    
+    Query parameters:
+    - q: Search query (required)
+    - limit: Maximum number of results (default: 20, max: 50)
+    """
+    try:
+        import tidalapi
+        
+        query = request.args.get('q')
+        if not query:
+            return jsonify({"error": "Missing required parameter 'q' (search query)"}), 400
+        
+        limit = bound_limit(request.args.get('limit', default=20, type=int))
+        
+        results = session.search(query, models=[tidalapi.Artist], limit=limit)
+        
+        artists = results.get('artists', [])
+        formatted_artists = [format_artist_data(artist) for artist in artists]
+        
+        return jsonify({
+            "query": query,
+            "artists": formatted_artists,
+            "total": len(formatted_artists)
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error searching artists: {str(e)}"}), 500
     
     
 if __name__ == '__main__':
