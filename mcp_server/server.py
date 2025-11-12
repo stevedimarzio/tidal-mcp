@@ -1,10 +1,12 @@
 from mcp.server.fastmcp import FastMCP
 import requests
 import atexit
+import sys
+from pathlib import Path
 
 from typing import Optional, List
 
-from utils import start_flask_app, shutdown_flask_app, FLASK_APP_URL, FLASK_PORT
+from .utils import start_flask_app, shutdown_flask_app, FLASK_APP_URL, FLASK_PORT
 
 # Print the port being used for debugging
 print(f"TIDAL MCP starting on port {FLASK_PORT}")
@@ -12,12 +14,12 @@ print(f"TIDAL MCP starting on port {FLASK_PORT}")
 # Create an MCP server
 mcp = FastMCP("TIDAL MCP")
 
-# Start the Flask app when this script is loaded
-print("MCP server module is being loaded. Starting Flask app...")
-start_flask_app()
+# Start the FastAPI app when this script is loaded
+logger.info("MCP server module is being loaded. Starting FastAPI app...")
+start_fastapi_app()
 
 # Register the shutdown function to be called when the MCP server exits
-atexit.register(shutdown_flask_app)
+atexit.register(shutdown_fastapi_app)
 
 @mcp.tool()
 def tidal_login() -> dict:
@@ -29,8 +31,8 @@ def tidal_login() -> dict:
         A dictionary containing authentication status and user information if successful
     """
     try:
-        # Call your Flask endpoint for TIDAL authentication
-        response = requests.get(f"{FLASK_APP_URL}/api/auth/login")
+        # Call your FastAPI endpoint for TIDAL authentication
+        response = requests.get(f"{FASTAPI_APP_URL}/api/auth/login")
         
         # Check if the request was successful
         if response.status_code == 200:
@@ -70,7 +72,7 @@ def get_favorite_tracks(limit: int = 20) -> dict:
     """
     try:
         # First, check if the user is authenticated
-        auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+        auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
         auth_data = auth_check.json()
         
         if not auth_data.get("authenticated", False):
@@ -79,8 +81,8 @@ def get_favorite_tracks(limit: int = 20) -> dict:
                 "message": "You need to login to TIDAL first before I can fetch your favorite tracks. Please use the tidal_login() function."
             }
             
-        # Call your Flask endpoint to retrieve tracks with the specified limit
-        response = requests.get(f"{FLASK_APP_URL}/api/tracks", params={"limit": limit})
+        # Call your FastAPI endpoint to retrieve tracks with the specified limit
+        response = requests.get(f"{FASTAPI_APP_URL}/api/tracks", params={"limit": limit})
         
         # Check if the request was successful
         if response.status_code == 200:
@@ -132,7 +134,7 @@ def _get_tidal_recommendations(track_ids: list = None, limit_per_track: int = 20
             "remove_duplicates": True
         }
         
-        response = requests.post(f"{FLASK_APP_URL}/api/recommendations/batch", json=payload)
+        response = requests.post(f"{FASTAPI_APP_URL}/api/recommendations/batch", json=payload)
         
         if response.status_code != 200:
             error_data = response.json()
@@ -324,7 +326,7 @@ def create_tidal_playlist(title: str, track_ids: list, description: str = "") ->
     """
     try:
         # First, check if the user is authenticated
-        auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+        auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
         auth_data = auth_check.json()
         
         if not auth_data.get("authenticated", False):
@@ -346,14 +348,14 @@ def create_tidal_playlist(title: str, track_ids: list, description: str = "") ->
                 "message": "You must provide at least one track ID to add to the playlist."
             }
         
-        # Create the playlist through the Flask API
+        # Create the playlist through the FastAPI API
         payload = {
             "title": title,
             "description": description,
             "track_ids": track_ids
         }
         
-        response = requests.post(f"{FLASK_APP_URL}/api/playlists", json=payload)
+        response = requests.post(f"{FASTAPI_APP_URL}/api/playlists", json=payload)
         
         # Check response
         if response.status_code != 200:
@@ -422,8 +424,8 @@ def get_user_playlists() -> dict:
         }
     
     try:
-        # Call the Flask endpoint to retrieve playlists with the specified limit
-        response = requests.get(f"{FLASK_APP_URL}/api/playlists")
+        # Call the FastAPI endpoint to retrieve playlists with the specified limit
+        response = requests.get(f"{FASTAPI_APP_URL}/api/playlists")
         
         # Check if the request was successful
         if response.status_code == 200:
@@ -498,9 +500,9 @@ def get_playlist_tracks(playlist_id: str, limit: int = 100) -> dict:
         }
     
     try:
-        # Call the Flask endpoint to retrieve tracks from the playlist
+        # Call the FastAPI endpoint to retrieve tracks from the playlist
         response = requests.get(
-            f"{FLASK_APP_URL}/api/playlists/{playlist_id}/tracks", 
+            f"{FASTAPI_APP_URL}/api/playlists/{playlist_id}/tracks", 
             params={"limit": limit}
         )
         
@@ -578,8 +580,8 @@ def delete_tidal_playlist(playlist_id: str) -> dict:
         }
     
     try:
-        # Call the Flask endpoint to delete the playlist
-        response = requests.delete(f"{FLASK_APP_URL}/api/playlists/{playlist_id}")
+        # Call the FastAPI endpoint to delete the playlist
+        response = requests.delete(f"{FASTAPI_APP_URL}/api/playlists/{playlist_id}")
         
         # Check if the request was successful
         if response.status_code == 200:
@@ -604,4 +606,295 @@ def delete_tidal_playlist(playlist_id: str) -> dict:
         return {
             "status": "error",
             "message": f"Failed to connect to TIDAL playlist service: {str(e)}"
+        }
+
+
+@mcp.tool()
+def search_tidal(query: str, limit: int = 20, search_types: Optional[str] = "tracks,albums,artists") -> dict:
+    """
+    Search for tracks, albums, and/or artists on TIDAL.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Search for [song/album/artist name]"
+    - "Find tracks by [artist]"
+    - "Look up [album name]"
+    - "Search TIDAL for [anything]"
+    - Any request to search or find music on TIDAL
+    
+    This function searches TIDAL's catalog for tracks, albums, and artists based on a query string.
+    
+    When processing the results of this tool:
+    1. Present search results in a clear, organized format
+    2. Group results by type (tracks, albums, artists) with descriptive headings
+    3. For tracks: Include track name, artist, album, duration, and TIDAL URL
+    4. For albums: Include album name, artist, release date, track count, and TIDAL URL
+    5. For artists: Include artist name and TIDAL URL
+    6. Always include the TIDAL URL for easy access
+    7. If no results are found, suggest alternative search terms
+    
+    Args:
+        query: The search query string (required)
+        limit: Maximum number of results per type (default: 20, max: 50)
+        search_types: Comma-separated list of types to search. Options: "tracks", "albums", "artists". 
+                     Default: "tracks,albums,artists" (searches all types)
+                     Examples: "tracks", "albums,artists", "tracks,albums"
+    
+    Returns:
+        A dictionary containing search results for the requested types
+    """
+    # First, check if the user is authenticated
+    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_data = auth_check.json()
+    
+    if not auth_data.get("authenticated", False):
+        return {
+            "status": "error",
+            "message": "You need to login to TIDAL first before searching. Please use the tidal_login() function."
+        }
+    
+    # Validate query
+    if not query or not query.strip():
+        return {
+            "status": "error",
+            "message": "Search query cannot be empty."
+        }
+    
+    try:
+        # Call the Flask search endpoint
+        response = requests.get(
+            f"{FLASK_APP_URL}/api/search",
+            params={
+                "q": query,
+                "limit": limit,
+                "types": search_types or "tracks,albums,artists"
+            }
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Search failed: {error_data.get('error', 'Unknown error')}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL search service: {str(e)}"
+        }
+
+
+@mcp.tool()
+def search_tidal_tracks(query: str, limit: int = 20) -> dict:
+    """
+    Search for tracks on TIDAL.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Search for the song [name]"
+    - "Find tracks by [artist]"
+    - "Look up the track [name]"
+    - Any request to search specifically for tracks/songs
+    
+    This function searches TIDAL's catalog for tracks based on a query string.
+    
+    When processing the results of this tool:
+    1. Present tracks in a clear list format
+    2. For each track, include: track name, artist, album, duration, and TIDAL URL
+    3. Always include the TIDAL URL for easy access
+    4. If no results are found, suggest alternative search terms
+    
+    Args:
+        query: The search query string (required)
+        limit: Maximum number of results (default: 20, max: 50)
+    
+    Returns:
+        A dictionary containing matching tracks
+    """
+    # First, check if the user is authenticated
+    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_data = auth_check.json()
+    
+    if not auth_data.get("authenticated", False):
+        return {
+            "status": "error",
+            "message": "You need to login to TIDAL first before searching. Please use the tidal_login() function."
+        }
+    
+    # Validate query
+    if not query or not query.strip():
+        return {
+            "status": "error",
+            "message": "Search query cannot be empty."
+        }
+    
+    try:
+        # Call the Flask search tracks endpoint
+        response = requests.get(
+            f"{FLASK_APP_URL}/api/search/tracks",
+            params={"q": query, "limit": limit}
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Track search failed: {error_data.get('error', 'Unknown error')}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL search service: {str(e)}"
+        }
+
+
+@mcp.tool()
+def search_tidal_albums(query: str, limit: int = 20) -> dict:
+    """
+    Search for albums on TIDAL.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Search for the album [name]"
+    - "Find albums by [artist]"
+    - "Look up the album [name]"
+    - Any request to search specifically for albums
+    
+    This function searches TIDAL's catalog for albums based on a query string.
+    
+    When processing the results of this tool:
+    1. Present albums in a clear list format
+    2. For each album, include: album name, artist, release date, track count, and TIDAL URL
+    3. Always include the TIDAL URL for easy access
+    4. If no results are found, suggest alternative search terms
+    
+    Args:
+        query: The search query string (required)
+        limit: Maximum number of results (default: 20, max: 50)
+    
+    Returns:
+        A dictionary containing matching albums
+    """
+    # First, check if the user is authenticated
+    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_data = auth_check.json()
+    
+    if not auth_data.get("authenticated", False):
+        return {
+            "status": "error",
+            "message": "You need to login to TIDAL first before searching. Please use the tidal_login() function."
+        }
+    
+    # Validate query
+    if not query or not query.strip():
+        return {
+            "status": "error",
+            "message": "Search query cannot be empty."
+        }
+    
+    try:
+        # Call the Flask search albums endpoint
+        response = requests.get(
+            f"{FLASK_APP_URL}/api/search/albums",
+            params={"q": query, "limit": limit}
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Album search failed: {error_data.get('error', 'Unknown error')}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL search service: {str(e)}"
+        }
+
+
+@mcp.tool()
+def search_tidal_artists(query: str, limit: int = 20) -> dict:
+    """
+    Search for artists on TIDAL.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Search for the artist [name]"
+    - "Find [artist name]"
+    - "Look up the artist [name]"
+    - Any request to search specifically for artists
+    
+    This function searches TIDAL's catalog for artists based on a query string.
+    
+    When processing the results of this tool:
+    1. Present artists in a clear list format
+    2. For each artist, include: artist name and TIDAL URL
+    3. Always include the TIDAL URL for easy access
+    4. If no results are found, suggest alternative search terms
+    
+    Args:
+        query: The search query string (required)
+        limit: Maximum number of results (default: 20, max: 50)
+    
+    Returns:
+        A dictionary containing matching artists
+    """
+    # First, check if the user is authenticated
+    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_data = auth_check.json()
+    
+    if not auth_data.get("authenticated", False):
+        return {
+            "status": "error",
+            "message": "You need to login to TIDAL first before searching. Please use the tidal_login() function."
+        }
+    
+    # Validate query
+    if not query or not query.strip():
+        return {
+            "status": "error",
+            "message": "Search query cannot be empty."
+        }
+    
+    try:
+        # Call the Flask search artists endpoint
+        response = requests.get(
+            f"{FLASK_APP_URL}/api/search/artists",
+            params={"q": query, "limit": limit}
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Artist search failed: {error_data.get('error', 'Unknown error')}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL search service: {str(e)}"
         }
