@@ -3,8 +3,8 @@
 ## Current Implementation Overview
 
 The TIDAL login flow works as follows:
-1. MCP server calls Flask endpoint `/api/auth/login`
-2. Flask creates `BrowserSession` and calls `login_session_file_auto()`
+1. MCP server calls FastAPI endpoint `/api/auth/login`
+2. FastAPI creates `BrowserSession` and calls `login_session_file_auto()`
 3. If no valid session exists, it calls `login_oauth_simple()`
 4. `login_oauth_simple()` opens browser and waits for `future.result()` to complete
 5. Session is saved to temp file: `{tempdir}/tidal-session-oauth.json`
@@ -18,7 +18,7 @@ future.result()  # Blocks indefinitely!
 ```
 
 **Problem**: The `future.result()` call has no timeout, meaning:
-- The Flask request handler will block indefinitely if user doesn't complete login
+- The FastAPI request handler will block indefinitely if user doesn't complete login
 - No way to detect if user abandoned the login process
 - Could cause resource exhaustion if multiple login attempts are made
 
@@ -63,7 +63,7 @@ self.load_session_from_file(session_file)  # No validation
 login_success = session.login_session_file_auto(SESSION_FILE, fn_print=log_message)
 ```
 
-**Problem**: The entire Flask request handler blocks until login completes. This means:
+**Problem**: The entire FastAPI request handler blocks until login completes. This means:
 - No way to handle concurrent login requests efficiently
 - User must wait for browser interaction to complete
 - No progress feedback
@@ -91,8 +91,8 @@ Actually, this is correct - the return statement is there. False alarm.
 
 ## Testing Results
 
-Flask app is not currently running. To test:
-1. Start Flask app
+FastAPI app is not currently running. To test:
+1. Start FastAPI app
 2. Call `/api/auth/login`
 3. Observe behavior
 

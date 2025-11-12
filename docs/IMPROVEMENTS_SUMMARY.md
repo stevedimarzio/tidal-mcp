@@ -13,7 +13,7 @@
 ### 1. Added Timeout Protection ✅
 - `future.result()` now has a timeout based on `login.expires_in + 10` seconds
 - Properly converts `concurrent.futures.TimeoutError` to `TimeoutError`
-- Prevents the Flask request from hanging indefinitely
+- Prevents the FastAPI request from hanging indefinitely
 
 ### 2. Better Session File Location ✅
 - Changed from temp directory to `~/.tidal-mcp/session.json`
@@ -74,7 +74,7 @@ To test the improvements:
 
 ## Additional Recommendations (Future)
 
-1. **Async/Background Login**: Consider implementing async login to avoid blocking Flask requests
+1. **Async/Background Login**: Consider implementing async login to avoid blocking FastAPI requests
 2. **Login Status Endpoint**: Add endpoint to check login progress without blocking
 3. **Session Refresh**: Implement automatic session refresh before expiration
 4. **Multiple User Support**: Support multiple TIDAL accounts with separate session files

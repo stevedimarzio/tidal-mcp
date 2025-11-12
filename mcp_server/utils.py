@@ -27,9 +27,6 @@ CURRENT_DIR = pathlib.Path(__file__).parent.absolute()
 FASTAPI_APP_PATH = os.path.join(CURRENT_DIR, "..", "tidal_api", "app.py")
 FASTAPI_APP_PATH = os.path.normpath(FASTAPI_APP_PATH)  # Normalize the path
 
-# Keep FLASK_APP_URL for backward compatibility during migration
-FLASK_APP_URL = FASTAPI_APP_URL
-FLASK_PORT = FASTAPI_PORT
 
 # Find the path to uv executable
 def find_uv_executable():
@@ -74,9 +71,9 @@ def start_fastapi_app():
     uv_executable = find_uv_executable()
     logger.debug(f"Using uv executable: {uv_executable}")
     
-    # Start the Flask app using uv
+    # Start the FastAPI app using uv
     # Include certifi to ensure SSL certificates are available
-    flask_process = subprocess.Popen([
+    fastapi_process = subprocess.Popen([
         uv_executable, "run",
         "--with", "tidalapi",
         "--with", "fastapi",

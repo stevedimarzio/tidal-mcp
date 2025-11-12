@@ -6,10 +6,20 @@ from pathlib import Path
 
 from typing import Optional, List
 
-from .utils import start_flask_app, shutdown_flask_app, FLASK_APP_URL, FLASK_PORT
+# Handle logger import for both module and direct execution
+try:
+    from .logger import logger
+except ImportError:
+    # Fallback for direct execution - add parent directory to path
+    parent_dir = Path(__file__).parent.parent
+    if str(parent_dir) not in sys.path:
+        sys.path.insert(0, str(parent_dir))
+    from mcp_server.logger import logger
+
+from .utils import start_fastapi_app, shutdown_fastapi_app, FASTAPI_APP_URL, FASTAPI_PORT
 
 # Print the port being used for debugging
-print(f"TIDAL MCP starting on port {FLASK_PORT}")
+print(f"TIDAL MCP starting on port {FASTAPI_PORT}")
 
 # Create an MCP server
 mcp = FastMCP("TIDAL MCP")
@@ -207,7 +217,7 @@ def recommend_tracks(track_ids: Optional[List[str]] = None, filter_criteria: Opt
         A dictionary containing both the seed tracks and recommended tracks
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -414,7 +424,7 @@ def get_user_playlists() -> dict:
         A dictionary containing the user's playlists sorted by last updated date
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -483,7 +493,7 @@ def get_playlist_tracks(playlist_id: str, limit: int = 100) -> dict:
         A dictionary containing the playlist information and all tracks in the playlist
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -563,7 +573,7 @@ def delete_tidal_playlist(playlist_id: str) -> dict:
         A dictionary containing the status of the playlist deletion
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -643,7 +653,7 @@ def search_tidal(query: str, limit: int = 20, search_types: Optional[str] = "tra
         A dictionary containing search results for the requested types
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -660,9 +670,9 @@ def search_tidal(query: str, limit: int = 20, search_types: Optional[str] = "tra
         }
     
     try:
-        # Call the Flask search endpoint
+        # Call the FastAPI search endpoint
         response = requests.get(
-            f"{FLASK_APP_URL}/api/search",
+            f"{FASTAPI_APP_URL}/api/search",
             params={
                 "q": query,
                 "limit": limit,
@@ -717,7 +727,7 @@ def search_tidal_tracks(query: str, limit: int = 20) -> dict:
         A dictionary containing matching tracks
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -734,9 +744,9 @@ def search_tidal_tracks(query: str, limit: int = 20) -> dict:
         }
     
     try:
-        # Call the Flask search tracks endpoint
+        # Call the FastAPI search tracks endpoint
         response = requests.get(
-            f"{FLASK_APP_URL}/api/search/tracks",
+            f"{FASTAPI_APP_URL}/api/search/tracks",
             params={"q": query, "limit": limit}
         )
         
@@ -787,7 +797,7 @@ def search_tidal_albums(query: str, limit: int = 20) -> dict:
         A dictionary containing matching albums
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -804,9 +814,9 @@ def search_tidal_albums(query: str, limit: int = 20) -> dict:
         }
     
     try:
-        # Call the Flask search albums endpoint
+        # Call the FastAPI search albums endpoint
         response = requests.get(
-            f"{FLASK_APP_URL}/api/search/albums",
+            f"{FASTAPI_APP_URL}/api/search/albums",
             params={"q": query, "limit": limit}
         )
         
@@ -857,7 +867,7 @@ def search_tidal_artists(query: str, limit: int = 20) -> dict:
         A dictionary containing matching artists
     """
     # First, check if the user is authenticated
-    auth_check = requests.get(f"{FLASK_APP_URL}/api/auth/status")
+    auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
     auth_data = auth_check.json()
     
     if not auth_data.get("authenticated", False):
@@ -874,9 +884,9 @@ def search_tidal_artists(query: str, limit: int = 20) -> dict:
         }
     
     try:
-        # Call the Flask search artists endpoint
+        # Call the FastAPI search artists endpoint
         response = requests.get(
-            f"{FLASK_APP_URL}/api/search/artists",
+            f"{FASTAPI_APP_URL}/api/search/artists",
             params={"q": query, "limit": limit}
         )
         
