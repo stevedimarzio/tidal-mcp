@@ -36,6 +36,30 @@ class TrackModel(BaseModel):
         }
 
 
+class RecentlyPlayedItem(BaseModel):
+    """Model representing a recently played track with timestamp."""
+    id: Optional[str] = Field(None, description="TIDAL track ID")
+    title: str = Field(..., description="Track title")
+    artist: str = Field(..., description="Artist name")
+    album: str = Field(..., description="Album name")
+    duration: int = Field(0, ge=0, description="Track duration in seconds")
+    url: Optional[HttpUrl] = Field(None, description="TIDAL track URL")
+    played_at: Optional[datetime] = Field(None, description="Timestamp when the track was played")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "12345678",
+                "title": "Bohemian Rhapsody",
+                "artist": "Queen",
+                "album": "A Night at the Opera",
+                "duration": 355,
+                "url": "https://tidal.com/browse/track/12345678?u",
+                "played_at": "2024-01-15T10:30:00Z"
+            }
+        }
+
+
 class AlbumModel(BaseModel):
     """Model representing a TIDAL album."""
     id: Optional[str] = Field(None, description="TIDAL album ID")
@@ -222,4 +246,85 @@ class SearchArtistsResponse(BaseModel):
     query: str = Field(..., description="Search query")
     artists: List[ArtistModel] = Field(..., description="Matching artists")
     total: int = Field(..., ge=0, description="Total number of results")
+
+
+class RecentlyPlayedResponse(BaseModel):
+    """Response model for recently played tracks endpoint."""
+    tracks: List[RecentlyPlayedItem] = Field(..., description="List of recently played tracks")
+    total: int = Field(..., ge=0, description="Total number of tracks returned")
+
+
+class PlaybackHistoryItem(BaseModel):
+    """Model representing a track in playback history with play count."""
+    id: Optional[str] = Field(None, description="TIDAL track ID")
+    title: str = Field(..., description="Track title")
+    artist: str = Field(..., description="Artist name")
+    album: str = Field(..., description="Album name")
+    duration: int = Field(0, ge=0, description="Track duration in seconds")
+    url: Optional[HttpUrl] = Field(None, description="TIDAL track URL")
+    play_count: int = Field(1, ge=0, description="Number of times the track was played")
+    first_played: Optional[datetime] = Field(None, description="First time the track was played")
+    last_played: Optional[datetime] = Field(None, description="Last time the track was played")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "id": "12345678",
+                "title": "Bohemian Rhapsody",
+                "artist": "Queen",
+                "album": "A Night at the Opera",
+                "duration": 355,
+                "url": "https://tidal.com/browse/track/12345678?u",
+                "play_count": 42,
+                "first_played": "2022-01-15T10:30:00Z",
+                "last_played": "2024-12-01T15:20:00Z"
+            }
+        }
+
+
+class ArtistPlaybackStats(BaseModel):
+    """Model representing aggregated playback statistics for an artist."""
+    artist_id: Optional[str] = Field(None, description="TIDAL artist ID")
+    artist_name: str = Field(..., description="Artist name")
+    url: Optional[HttpUrl] = Field(None, description="TIDAL artist URL")
+    play_count: int = Field(0, ge=0, description="Total number of plays across all tracks")
+    track_count: int = Field(0, ge=0, description="Number of unique tracks played")
+    total_duration: int = Field(0, ge=0, description="Total duration played in seconds")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "artist_id": "11111111",
+                "artist_name": "Queen",
+                "url": "https://tidal.com/browse/artist/11111111?u",
+                "play_count": 150,
+                "track_count": 25,
+                "total_duration": 13200
+            }
+        }
+
+
+class PlaybackHistoryResponse(BaseModel):
+    """Response model for playback history endpoint."""
+    tracks: List[PlaybackHistoryItem] = Field(..., description="List of tracks with play counts")
+    total_tracks: int = Field(..., ge=0, description="Total number of unique tracks")
+    total_plays: int = Field(..., ge=0, description="Total number of plays")
+    date_from: Optional[datetime] = Field(None, description="Start date of the history period")
+    date_to: Optional[datetime] = Field(None, description="End date of the history period")
+
+
+class TopArtistsResponse(BaseModel):
+    """Response model for top artists endpoint."""
+    artists: List[ArtistPlaybackStats] = Field(..., description="List of top artists with statistics")
+    total: int = Field(..., ge=0, description="Total number of artists returned")
+    date_from: Optional[datetime] = Field(None, description="Start date of the period")
+    date_to: Optional[datetime] = Field(None, description="End date of the period")
+
+
+class TopTracksResponse(BaseModel):
+    """Response model for top tracks endpoint."""
+    tracks: List[PlaybackHistoryItem] = Field(..., description="List of top tracks with play counts")
+    total: int = Field(..., ge=0, description="Total number of tracks returned")
+    date_from: Optional[datetime] = Field(None, description="Start date of the period")
+    date_to: Optional[datetime] = Field(None, description="End date of the period")
 

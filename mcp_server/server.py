@@ -113,6 +113,289 @@ def get_favorite_tracks(limit: int = 20) -> dict:
             "status": "error",
             "message": f"Failed to connect to TIDAL tracks service: {str(e)}"
         }
+
+@mcp.tool()
+def get_recently_played(limit: int = 50) -> dict:
+    """
+    Retrieves the user's recently played tracks from their TIDAL account.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "What have I been listening to?"
+    - "Show me my recently played tracks"
+    - "What songs did I recently play?"
+    - "Get my recently played tracks"
+    - "Show me my recent listening activity"
+    - Any request to view their recently played tracks
+    
+    This function retrieves the user's recently played tracks from TIDAL.
+    
+    Args:
+        limit: Maximum number of tracks to retrieve (default: 50, max: 50)
+    
+    Returns:
+        A dictionary containing track information including track ID, title, artist, album, duration, and when it was played.
+        Returns an error message if not authenticated or if retrieval fails.
+    """
+    try:
+        # First, check if the user is authenticated
+        auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
+        auth_data = auth_check.json()
+        
+        if not auth_data.get("authenticated", False):
+            return {
+                "status": "error",
+                "message": "You need to login to TIDAL first before I can fetch your recently played tracks. Please use the tidal_login() function."
+            }
+            
+        # Call your FastAPI endpoint to retrieve recently played tracks with the specified limit
+        response = requests.get(f"{FASTAPI_APP_URL}/api/recently_played", params={"limit": limit})
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        elif response.status_code == 501:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Recently played tracks are not available: {error_data.get('detail', 'This feature may not be supported by the TIDAL API.')}"
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Failed to retrieve recently played tracks: {error_data.get('detail', error_data.get('error', 'Unknown error'))}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL recently played service: {str(e)}"
+        }
+
+@mcp.tool()
+def get_playback_history(limit: Optional[int] = None, years_back: Optional[int] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
+    """
+    Retrieves the user's full playback history with play counts from their TIDAL account.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Show me my listening history"
+    - "What have I listened to in the last 2 years?"
+    - "Get my playback history"
+    - "Show me all the tracks I've played"
+    - Any request to view their full listening history with play counts
+    
+    This function retrieves the user's complete playback history from TIDAL, including play counts and timestamps.
+    
+    Args:
+        limit: Maximum number of tracks to retrieve (default: all available, max: 1000)
+        years_back: Number of years back to retrieve history (e.g., 2 for last 2 years, max: 10)
+        date_from: Start date in ISO format (YYYY-MM-DD)
+        date_to: End date in ISO format (YYYY-MM-DD)
+    
+    Returns:
+        A dictionary containing track information with play counts, first played, and last played timestamps.
+        Returns an error message if not authenticated or if retrieval fails.
+    """
+    try:
+        # First, check if the user is authenticated
+        auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
+        auth_data = auth_check.json()
+        
+        if not auth_data.get("authenticated", False):
+            return {
+                "status": "error",
+                "message": "You need to login to TIDAL first before I can fetch your playback history. Please use the tidal_login() function."
+            }
+        
+        # Build query parameters
+        params = {}
+        if limit is not None:
+            params["limit"] = limit
+        if years_back is not None:
+            params["years_back"] = years_back
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
+            
+        # Call your FastAPI endpoint to retrieve playback history
+        response = requests.get(f"{FASTAPI_APP_URL}/api/playback_history", params=params)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        elif response.status_code == 501:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Playback history is not available: {error_data.get('detail', 'This feature may not be supported by the TIDAL API.')}"
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Failed to retrieve playback history: {error_data.get('detail', error_data.get('error', 'Unknown error'))}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL playback history service: {str(e)}"
+        }
+
+@mcp.tool()
+def get_top_artists(limit: int = 50, years_back: Optional[int] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
+    """
+    Retrieves the user's top artists based on playback history from their TIDAL account.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Show me my most listened artists"
+    - "Who are my top artists in the last 2 years?"
+    - "What artists do I listen to the most?"
+    - "Get my top artists"
+    - Any request to view their most listened artists
+    
+    This function retrieves the user's top artists based on playback history, aggregated by play count.
+    
+    Args:
+        limit: Maximum number of artists to retrieve (default: 50, max: 100)
+        years_back: Number of years back to analyze (e.g., 2 for last 2 years, max: 10)
+        date_from: Start date in ISO format (YYYY-MM-DD)
+        date_to: End date in ISO format (YYYY-MM-DD)
+    
+    Returns:
+        A dictionary containing artist statistics including play count, track count, and total duration.
+        Returns an error message if not authenticated or if retrieval fails.
+    """
+    try:
+        # First, check if the user is authenticated
+        auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
+        auth_data = auth_check.json()
+        
+        if not auth_data.get("authenticated", False):
+            return {
+                "status": "error",
+                "message": "You need to login to TIDAL first before I can fetch your top artists. Please use the tidal_login() function."
+            }
+        
+        # Build query parameters
+        params = {"limit": limit}
+        if years_back is not None:
+            params["years_back"] = years_back
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
+            
+        # Call your FastAPI endpoint to retrieve top artists
+        response = requests.get(f"{FASTAPI_APP_URL}/api/playback_history/top_artists", params=params)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        elif response.status_code == 501:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Top artists are not available: {error_data.get('detail', 'This feature may not be supported by the TIDAL API.')}"
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Failed to retrieve top artists: {error_data.get('detail', error_data.get('error', 'Unknown error'))}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL top artists service: {str(e)}"
+        }
+
+@mcp.tool()
+def get_top_tracks(limit: int = 50, years_back: Optional[int] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> dict:
+    """
+    Retrieves the user's top tracks based on playback history from their TIDAL account.
+    
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "Show me my most listened tracks"
+    - "What are my top tracks in the last 2 years?"
+    - "What songs do I listen to the most?"
+    - "Get my top tracks"
+    - Any request to view their most listened tracks
+    
+    This function retrieves the user's top tracks based on playback history, sorted by play count.
+    
+    Args:
+        limit: Maximum number of tracks to retrieve (default: 50, max: 100)
+        years_back: Number of years back to analyze (e.g., 2 for last 2 years, max: 10)
+        date_from: Start date in ISO format (YYYY-MM-DD)
+        date_to: End date in ISO format (YYYY-MM-DD)
+    
+    Returns:
+        A dictionary containing track information with play counts, sorted by most played.
+        Returns an error message if not authenticated or if retrieval fails.
+    """
+    try:
+        # First, check if the user is authenticated
+        auth_check = requests.get(f"{FASTAPI_APP_URL}/api/auth/status")
+        auth_data = auth_check.json()
+        
+        if not auth_data.get("authenticated", False):
+            return {
+                "status": "error",
+                "message": "You need to login to TIDAL first before I can fetch your top tracks. Please use the tidal_login() function."
+            }
+        
+        # Build query parameters
+        params = {"limit": limit}
+        if years_back is not None:
+            params["years_back"] = years_back
+        if date_from:
+            params["date_from"] = date_from
+        if date_to:
+            params["date_to"] = date_to
+            
+        # Call your FastAPI endpoint to retrieve top tracks
+        response = requests.get(f"{FASTAPI_APP_URL}/api/playback_history/top_tracks", params=params)
+        
+        # Check if the request was successful
+        if response.status_code == 200:
+            return response.json()
+        elif response.status_code == 401:
+            return {
+                "status": "error",
+                "message": "Not authenticated with TIDAL. Please login first using tidal_login()."
+            }
+        elif response.status_code == 501:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Top tracks are not available: {error_data.get('detail', 'This feature may not be supported by the TIDAL API.')}"
+            }
+        else:
+            error_data = response.json()
+            return {
+                "status": "error",
+                "message": f"Failed to retrieve top tracks: {error_data.get('detail', error_data.get('error', 'Unknown error'))}"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to connect to TIDAL top tracks service: {str(e)}"
+        }
     
 def _get_tidal_recommendations(track_ids: list = None, limit_per_track: int = 20, filter_criteria: str = None) -> dict:
     """

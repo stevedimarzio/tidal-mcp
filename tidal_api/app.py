@@ -7,8 +7,9 @@ All endpoints use Pydantic models for request/response validation.
 import os
 import tempfile
 import concurrent.futures
-from typing import List
+from typing import List, Optional
 from pathlib import Path
+from datetime import datetime, timedelta
 import ssl
 import sys
 
@@ -18,7 +19,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query
 try:
     from .logger import logger
     from .browser_session import BrowserSession
-    from .utils import format_track_data, format_album_data, format_artist_data, bound_limit
+    from .utils import format_track_data, format_album_data, format_artist_data, bound_limit, format_recently_played_item, format_playback_history_item, _safe_get_attr
     from .models import (
         LoginResponse,
         AuthStatusResponse,
@@ -38,12 +39,19 @@ try:
         SearchTracksResponse,
         SearchAlbumsResponse,
         SearchArtistsResponse,
+        RecentlyPlayedResponse,
+        RecentlyPlayedItem,
+        PlaybackHistoryResponse,
+        PlaybackHistoryItem,
+        TopArtistsResponse,
+        TopTracksResponse,
+        ArtistPlaybackStats,
     )
 except ImportError:
     # Fallback for direct execution
     from logger import logger
     from browser_session import BrowserSession
-    from utils import format_track_data, format_album_data, format_artist_data, bound_limit
+    from utils import format_track_data, format_album_data, format_artist_data, bound_limit, format_recently_played_item, format_playback_history_item, _safe_get_attr
     from models import (
         LoginResponse,
         AuthStatusResponse,
@@ -64,6 +72,13 @@ except ImportError:
         SearchTracksResponse,
         SearchAlbumsResponse,
         SearchArtistsResponse,
+        RecentlyPlayedResponse,
+        RecentlyPlayedItem,
+        PlaybackHistoryResponse,
+        PlaybackHistoryItem,
+        TopArtistsResponse,
+        TopTracksResponse,
+        ArtistPlaybackStats,
     )
 
 
@@ -298,6 +313,423 @@ async def get_tracks(
     except Exception as e:
         logger.error(f"Error in get_tracks: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching tracks: {str(e)}")
+
+
+@app.get('/api/recently_played', response_model=RecentlyPlayedResponse)
+async def get_recently_played(
+    limit: int = Query(default=50, ge=1, le=50, description="Maximum number of tracks to retrieve"),
+    session: BrowserSession = Depends(get_tidal_session)
+) -> RecentlyPlayedResponse:
+    """
+    Get the user's recently played tracks.
+    
+    Args:
+        limit: Maximum number of tracks to retrieve (1-50, default: 50)
+        session: Authenticated TIDAL session (dependency)
+    """
+    try:
+        limit = bound_limit(limit)
+        
+        # Try different methods to get recently played tracks
+        # The TIDAL API might use different method names
+        recently_played_tracks = []
+        played_at_times = []
+        
+        try:
+            # Try user.recently_played() if available
+            if hasattr(session.user, 'recently_played'):
+                recently_played_items = session.user.recently_played(limit=limit)
+                if hasattr(recently_played_items, '__iter__') and not isinstance(recently_played_items, (list, tuple, str)):
+                    recently_played_items = list(recently_played_items)
+                
+                for item in recently_played_items:
+                    # Handle different possible structures
+                    if hasattr(item, 'track'):
+                        track = item.track
+                        played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+                    elif hasattr(item, 'id'):
+                        track = item
+                        played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+                    else:
+                        track = item
+                        played_at = None
+                    
+                    recently_played_tracks.append(track)
+                    played_at_times.append(played_at)
+            # Try user.history() if available
+            elif hasattr(session.user, 'history'):
+                recently_played_items = session.user.history(limit=limit)
+                if hasattr(recently_played_items, '__iter__') and not isinstance(recently_played_items, (list, tuple, str)):
+                    recently_played_items = list(recently_played_items)
+                
+                for item in recently_played_items:
+                    if hasattr(item, 'track'):
+                        track = item.track
+                        played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+                    elif hasattr(item, 'id'):
+                        track = item
+                        played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+                    else:
+                        track = item
+                        played_at = None
+                    
+                    recently_played_tracks.append(track)
+                    played_at_times.append(played_at)
+            # Try session.get_recently_played() if available
+            elif hasattr(session, 'get_recently_played'):
+                recently_played_items = session.get_recently_played(limit=limit)
+                if hasattr(recently_played_items, '__iter__') and not isinstance(recently_played_items, (list, tuple, str)):
+                    recently_played_items = list(recently_played_items)
+                
+                for item in recently_played_items:
+                    if hasattr(item, 'track'):
+                        track = item.track
+                        played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+                    elif hasattr(item, 'id'):
+                        track = item
+                        played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+                    else:
+                        track = item
+                        played_at = None
+                    
+                    recently_played_tracks.append(track)
+                    played_at_times.append(played_at)
+            else:
+                # Fallback: try to access via user attributes
+                # Some APIs store recently played in user attributes
+                if hasattr(session.user, 'recent_tracks'):
+                    recently_played_tracks = session.user.recent_tracks(limit=limit)
+                    if hasattr(recently_played_tracks, '__iter__') and not isinstance(recently_played_tracks, (list, tuple, str)):
+                        recently_played_tracks = list(recently_played_tracks)
+                    played_at_times = [None] * len(recently_played_tracks)
+                else:
+                    raise AttributeError("Recently played tracks not available - no suitable method found")
+        except AttributeError as e:
+            logger.warning(f"Recently played method not found: {e}")
+            # If no specific recently played method, we might need to use a different approach
+            # For now, return empty list with a message
+            raise HTTPException(
+                status_code=501,
+                detail="Recently played tracks are not available through the TIDAL API. This feature may require a different API endpoint."
+            )
+        except Exception as e:
+            logger.error(f"Error fetching recently played tracks: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error fetching recently played tracks: {str(e)}")
+        
+        # Format tracks with timestamps
+        recently_played_list = []
+        for i, track in enumerate(recently_played_tracks):
+            try:
+                played_at = played_at_times[i] if i < len(played_at_times) else None
+                recently_played_list.append(format_recently_played_item(track, played_at=played_at))
+            except Exception as e:
+                logger.warning(f"Error formatting recently played track: {e}")
+                continue
+
+        return RecentlyPlayedResponse(tracks=recently_played_list, total=len(recently_played_list))
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_recently_played: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching recently played tracks: {str(e)}")
+
+
+# ============================================================================
+# Playback History Endpoints
+# ============================================================================
+
+@app.get('/api/playback_history', response_model=PlaybackHistoryResponse)
+async def get_playback_history(
+    limit: Optional[int] = Query(default=None, ge=1, le=1000, description="Maximum number of tracks to retrieve (default: all)"),
+    years_back: Optional[int] = Query(default=None, ge=1, le=10, description="Number of years back to retrieve history"),
+    date_from: Optional[str] = Query(default=None, description="Start date (ISO format: YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(default=None, description="End date (ISO format: YYYY-MM-DD)"),
+    session: BrowserSession = Depends(get_tidal_session)
+) -> PlaybackHistoryResponse:
+    """
+    Get the user's full playback history with play counts.
+    
+    Args:
+        limit: Maximum number of tracks to retrieve (default: all available)
+        years_back: Number of years back to retrieve history (e.g., 2 for last 2 years)
+        date_from: Start date in ISO format (YYYY-MM-DD)
+        date_to: End date in ISO format (YYYY-MM-DD)
+        session: Authenticated TIDAL session (dependency)
+    """
+    try:
+        from collections import defaultdict
+        
+        # Parse date filters
+        date_from_dt = None
+        date_to_dt = None
+        
+        if years_back:
+            date_from_dt = datetime.now() - timedelta(days=years_back * 365)
+            date_to_dt = datetime.now()
+        else:
+            if date_from:
+                try:
+                    date_from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid date_from format: {date_from}. Use YYYY-MM-DD")
+            if date_to:
+                try:
+                    date_to_dt = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid date_to format: {date_to}. Use YYYY-MM-DD")
+        
+        # Try to get playback history from TIDAL API
+        # The API might provide this through different methods
+        history_items = []
+        
+        try:
+            # Try user.playback_history() if available
+            if hasattr(session.user, 'playback_history'):
+                raw_history = session.user.playback_history(limit=limit or 10000)
+                if hasattr(raw_history, '__iter__') and not isinstance(raw_history, (list, tuple, str)):
+                    raw_history = list(raw_history)
+                history_items = raw_history
+            # Try user.history() with larger limit for full history
+            elif hasattr(session.user, 'history'):
+                raw_history = session.user.history(limit=limit or 10000)
+                if hasattr(raw_history, '__iter__') and not isinstance(raw_history, (list, tuple, str)):
+                    raw_history = list(raw_history)
+                history_items = raw_history
+            else:
+                raise AttributeError("Playback history not available - no suitable method found")
+        except AttributeError as e:
+            logger.warning(f"Playback history method not found: {e}")
+            raise HTTPException(
+                status_code=501,
+                detail="Playback history is not available through the TIDAL API. This feature may require a different API endpoint."
+            )
+        except Exception as e:
+            logger.error(f"Error fetching playback history: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Error fetching playback history: {str(e)}")
+        
+        # Aggregate tracks by ID to count plays
+        track_plays = defaultdict(lambda: {'track': None, 'play_count': 0, 'first_played': None, 'last_played': None})
+        
+        for item in history_items:
+            # Extract track and timestamp
+            if hasattr(item, 'track'):
+                track = item.track
+                played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+            elif hasattr(item, 'id'):
+                track = item
+                played_at = getattr(item, 'played_at', None) or getattr(item, 'timestamp', None)
+            else:
+                continue
+            
+            # Filter by date if specified
+            if played_at and date_from_dt and played_at < date_from_dt:
+                continue
+            if played_at and date_to_dt and played_at > date_to_dt:
+                continue
+            
+            track_id = str(_safe_get_attr(track, 'id', ''))
+            if not track_id:
+                continue
+            
+            if track_plays[track_id]['track'] is None:
+                track_plays[track_id]['track'] = track
+            
+            track_plays[track_id]['play_count'] += 1
+            
+            if played_at:
+                if track_plays[track_id]['first_played'] is None or played_at < track_plays[track_id]['first_played']:
+                    track_plays[track_id]['first_played'] = played_at
+                if track_plays[track_id]['last_played'] is None or played_at > track_plays[track_id]['last_played']:
+                    track_plays[track_id]['last_played'] = played_at
+        
+        # Format history items
+        history_list = []
+        total_plays = 0
+        
+        for track_id, data in track_plays.items():
+            try:
+                history_item = format_playback_history_item(
+                    data['track'],
+                    play_count=data['play_count'],
+                    first_played=data['first_played'],
+                    last_played=data['last_played']
+                )
+                history_list.append(history_item)
+                total_plays += data['play_count']
+            except Exception as e:
+                logger.warning(f"Error formatting playback history track: {e}")
+                continue
+        
+        # Sort by play count descending
+        history_list.sort(key=lambda x: x.play_count, reverse=True)
+        
+        # Apply limit if specified
+        if limit:
+            history_list = history_list[:limit]
+        
+        return PlaybackHistoryResponse(
+            tracks=history_list,
+            total_tracks=len(history_list),
+            total_plays=total_plays,
+            date_from=date_from_dt,
+            date_to=date_to_dt
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_playback_history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching playback history: {str(e)}")
+
+
+@app.get('/api/playback_history/top_artists', response_model=TopArtistsResponse)
+async def get_top_artists(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of artists to retrieve"),
+    years_back: Optional[int] = Query(default=None, ge=1, le=10, description="Number of years back to analyze"),
+    date_from: Optional[str] = Query(default=None, description="Start date (ISO format: YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(default=None, description="End date (ISO format: YYYY-MM-DD)"),
+    session: BrowserSession = Depends(get_tidal_session)
+) -> TopArtistsResponse:
+    """
+    Get the user's top artists based on playback history.
+    
+    Args:
+        limit: Maximum number of artists to retrieve (1-100, default: 50)
+        years_back: Number of years back to analyze (e.g., 2 for last 2 years)
+        date_from: Start date in ISO format (YYYY-MM-DD)
+        date_to: End date in ISO format (YYYY-MM-DD)
+        session: Authenticated TIDAL session (dependency)
+    """
+    try:
+        from collections import defaultdict
+        
+        # Parse date filters
+        date_from_dt = None
+        date_to_dt = None
+        
+        if years_back:
+            date_from_dt = datetime.now() - timedelta(days=years_back * 365)
+            date_to_dt = datetime.now()
+        else:
+            if date_from:
+                try:
+                    date_from_dt = datetime.fromisoformat(date_from.replace('Z', '+00:00'))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid date_from format: {date_from}. Use YYYY-MM-DD")
+            if date_to:
+                try:
+                    date_to_dt = datetime.fromisoformat(date_to.replace('Z', '+00:00'))
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid date_to format: {date_to}. Use YYYY-MM-DD")
+        
+        # Get playback history
+        history_response = await get_playback_history(
+            limit=None,  # Get all for aggregation
+            years_back=years_back,
+            date_from=date_from,
+            date_to=date_to,
+            session=session
+        )
+        
+        # Aggregate by artist
+        artist_stats = defaultdict(lambda: {'artist_id': None, 'artist_name': '', 'play_count': 0, 'track_count': 0, 'total_duration': 0})
+        
+        for track_item in history_response.tracks:
+            artist_name = track_item.artist
+            if not artist_name or artist_name == "Unknown":
+                continue
+            
+            artist_stats[artist_name]['artist_name'] = artist_name
+            artist_stats[artist_name]['play_count'] += track_item.play_count
+            artist_stats[artist_name]['track_count'] += 1
+            artist_stats[artist_name]['total_duration'] += track_item.duration * track_item.play_count
+        
+        # Convert to list and sort by play count
+        artists_list = []
+        for artist_name, stats in artist_stats.items():
+            # Try to get artist ID from first track with this artist
+            # This is a simplified approach - in practice, you'd want to look up the artist
+            artist_id = None
+            artist_url = None
+            if stats['artist_id']:
+                artist_id = stats['artist_id']
+                artist_url = f"https://tidal.com/browse/artist/{artist_id}?u"
+            
+            artists_list.append(ArtistPlaybackStats(
+                artist_id=artist_id,
+                artist_name=artist_name,
+                url=artist_url,
+                play_count=stats['play_count'],
+                track_count=stats['track_count'],
+                total_duration=stats['total_duration']
+            ))
+        
+        # Sort by play count descending
+        artists_list.sort(key=lambda x: x.play_count, reverse=True)
+        
+        # Apply limit
+        limit = bound_limit(limit, max_n=100)
+        artists_list = artists_list[:limit]
+        
+        return TopArtistsResponse(
+            artists=artists_list,
+            total=len(artists_list),
+            date_from=date_from_dt,
+            date_to=date_to_dt
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_top_artists: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching top artists: {str(e)}")
+
+
+@app.get('/api/playback_history/top_tracks', response_model=TopTracksResponse)
+async def get_top_tracks(
+    limit: int = Query(default=50, ge=1, le=100, description="Maximum number of tracks to retrieve"),
+    years_back: Optional[int] = Query(default=None, ge=1, le=10, description="Number of years back to analyze"),
+    date_from: Optional[str] = Query(default=None, description="Start date (ISO format: YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(default=None, description="End date (ISO format: YYYY-MM-DD)"),
+    session: BrowserSession = Depends(get_tidal_session)
+) -> TopTracksResponse:
+    """
+    Get the user's top tracks based on playback history.
+    
+    Args:
+        limit: Maximum number of tracks to retrieve (1-100, default: 50)
+        years_back: Number of years back to analyze (e.g., 2 for last 2 years)
+        date_from: Start date in ISO format (YYYY-MM-DD)
+        date_to: End date in ISO format (YYYY-MM-DD)
+        session: Authenticated TIDAL session (dependency)
+    """
+    try:
+        # Get playback history
+        history_response = await get_playback_history(
+            limit=limit,
+            years_back=years_back,
+            date_from=date_from,
+            date_to=date_to,
+            session=session
+        )
+        
+        # Tracks are already sorted by play count from get_playback_history
+        limit = bound_limit(limit, max_n=100)
+        top_tracks = history_response.tracks[:limit]
+        
+        return TopTracksResponse(
+            tracks=top_tracks,
+            total=len(top_tracks),
+            date_from=history_response.date_from,
+            date_to=history_response.date_to
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_top_tracks: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching top tracks: {str(e)}")
 
 
 @app.get('/api/recommendations/track/{track_id}', response_model=RecommendationsResponse)
