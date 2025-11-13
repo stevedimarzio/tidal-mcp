@@ -1,0 +1,46 @@
+version: '3'
+
+vars:
+  HTTP_PORT: "8100"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Setup project - install dependencies
+    cmds:
+      - uv pip install --editable .
+
+  dev:
+    desc: Run MCP server in HTTP mode for local development
+    cmds:
+      - uv run python start_mcp_http.py --port {{.HTTP_PORT}}
+
+  print-cursor-config:
+    desc: Print copy&paste ready config for Cursor local debug
+    cmds:
+      - |
+        echo "{"
+        echo '  "mcpServers": {'
+        echo '    "TIDAL MCP (HTTP)": {'
+        echo '      "url": "http://127.0.0.1:{{.HTTP_PORT}}/sse",'
+        echo '      "transport": "sse"'
+        echo "    }"
+        echo "  }"
+        echo "}"
+
+  print-claude-config:
+    desc: Print copy&paste ready config for Claude Desktop local debug
+    cmds:
+      - |
+        echo "{"
+        echo '  "mcpServers": {'
+        echo '    "TIDAL MCP (HTTP)": {'
+        echo '      "url": "http://127.0.0.1:{{.HTTP_PORT}}/sse",'
+        echo '      "transport": "sse"'
+        echo "    }"
+        echo "  }"
+        echo "}"
