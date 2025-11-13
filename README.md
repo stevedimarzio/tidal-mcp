@@ -48,14 +48,19 @@ The LLM filters and curates results using your input, finds similar tracks via T
 To run the MCP server directly for testing:
 
 ```bash
-# Option 1: Using the start script
+# Option 1: Using the start script (stdio mode - for Claude Desktop)
 uv run python start_mcp.py
 
 # Option 2: Using uv with mcp command directly
 uv run mcp run mcp_server/server.py
+
+# Option 3: HTTP mode (for debugging with Cursor)
+uv run python start_mcp_http.py --port 8100
 ```
 
 **Note:** Always use `uv run` to ensure all dependencies are available in the correct environment.
+
+**HTTP Mode for Debugging:** If you want to debug the MCP server or connect it to Cursor via HTTP, use `start_mcp_http.py`. See [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md) for detailed instructions.
 
 
 ## MCP Client Configuration
@@ -164,6 +169,34 @@ After restarting Claude Desktop:
 
 Example screenshot of the MCP configuration in Claude Desktop:
 ![Claude MCP Configuration](./assets/claude_desktop_config.png)
+
+### Cursor Configuration (HTTP Mode for Debugging)
+
+To use the MCP server with Cursor in HTTP mode for debugging:
+
+1. **Start the server in HTTP mode:**
+   ```bash
+   uv run python start_mcp_http.py --port 8100
+   ```
+
+2. **Configure Cursor:**
+   - Open Cursor Settings
+   - Navigate to MCP/Model Context Protocol settings
+   - Add the following configuration:
+   ```json
+   {
+     "mcpServers": {
+       "TIDAL MCP (HTTP)": {
+         "url": "http://127.0.0.1:8100/sse",
+         "transport": "sse"
+       }
+     }
+   }
+   ```
+
+3. **Restart Cursor** and verify the connection
+
+For detailed instructions and troubleshooting, see the [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md).
 
 #### Troubleshooting
 
