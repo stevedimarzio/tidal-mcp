@@ -8,15 +8,15 @@ This script should be run with uv to ensure all dependencies are available:
 Or use uv directly:
     uv run mcp run mcp_server/server.py
 """
+
 import sys
-import os
 
 # Add current directory to Python path
-sys.path.append('.')
+sys.path.append(".")
 
 # Check if required modules are available
 try:
-    from mcp.server.fastmcp import FastMCP
+    pass  # FastMCP imported in server module
 except ImportError:
     print("ERROR: Required dependencies are not installed.", file=sys.stderr)
     print("\nThis project uses 'uv' for dependency management.", file=sys.stderr)
@@ -28,9 +28,9 @@ except ImportError:
     sys.exit(1)
 
 # Import and run the MCP server
-from mcp_server.server import mcp
 from mcp_server.logger import logger
+from mcp_server.server import mcp
 
 if __name__ == "__main__":
-    logger.info('Starting TIDAL MCP server...')
+    logger.info("Starting TIDAL MCP server...")
     mcp.run()

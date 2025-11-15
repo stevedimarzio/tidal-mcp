@@ -1,96 +1,71 @@
+import concurrent.futures
 import webbrowser
-import os
-import ssl
-import sys
+from collections.abc import Callable
+from pathlib import Path
 
-# Handle logger import for both module and direct execution
-try:
-    from .logger import logger
-except ImportError:
-    from logger import logger
+import tidalapi
 
 # Configure SSL certificates before importing tidalapi
 # This fixes issues with uv environments where certifi path might be invalid
-def configure_ssl_for_tidalapi():
-    """Configure SSL certificates for tidalapi library."""
-    try:
-        import certifi
-        cert_path = certifi.where()
-        if os.path.exists(cert_path):
-            # Set environment variables for requests (used by tidalapi)
-            os.environ['REQUESTS_CA_BUNDLE'] = cert_path
-            os.environ['SSL_CERT_FILE'] = cert_path
-            # Also configure default SSL context
-            ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=cert_path)
-        else:
-            # Certificate file doesn't exist, use system certificates
-            logger.warning(f"certifi certificate bundle not found at {cert_path}, using system certificates")
-            # Use default context which should use system certificates
-            ssl._create_default_https_context = ssl.create_default_context
-    except ImportError:
-        # certifi not available, use system defaults
-        logger.warning("certifi not available, using system SSL certificates")
-        ssl._create_default_https_context = ssl.create_default_context
-    except Exception as e:
-        logger.warning(f"Could not configure SSL certificates: {e}, using system defaults")
-        ssl._create_default_https_context = ssl.create_default_context
+try:
+    from .utils import configure_ssl_certificates
+except ImportError:
+    from utils import configure_ssl_certificates
 
 # Configure SSL before importing tidalapi
-configure_ssl_for_tidalapi()
+configure_ssl_certificates()
 
-import tidalapi
-from typing import Callable, Optional
-from pathlib import Path
-import concurrent.futures
 
 class BrowserSession(tidalapi.Session):
     """
     Extended tidalapi.Session that automatically opens the login URL in a browser
     """
-    
+
     def login_oauth_simple(self, fn_print: Callable[[str], None] = print) -> None:
         """
         Login to TIDAL with a remote link, automatically opening the URL in a browser.
-        
+
         :param fn_print: The function to display additional information
         :raises: TimeoutError: If the login takes too long
         """
         login, future = self.login_oauth()
-        
+
         # Display information about the login
         text = "Opening browser for TIDAL login. The code will expire in {0} seconds"
         fn_print(text.format(login.expires_in))
-        
+
         # Open the URL in the default browser
         auth_url = login.verification_uri_complete
-        if not auth_url.startswith('http'):
-            auth_url = 'https://' + auth_url
-        
+        if not auth_url.startswith("http"):
+            auth_url = "https://" + auth_url
+
         # Try to open browser, but continue even if it fails
         try:
             webbrowser.open(auth_url)
         except Exception as e:
             fn_print(f"Warning: Could not open browser automatically: {e}")
             fn_print(f"Please visit this URL manually: {auth_url}")
-        
+
         # Wait for the authentication to complete with timeout
         # Use expires_in + small buffer (10 seconds) as timeout
         timeout = login.expires_in + 10
         try:
             future.result(timeout=timeout)
-        except concurrent.futures.TimeoutError:
-            raise TimeoutError(f"Login timed out after {timeout} seconds. Please try again.")
-    
+        except concurrent.futures.TimeoutError as e:
+            raise TimeoutError(
+                f"Login timed out after {timeout} seconds. Please try again."
+            ) from e
+
     def login_session_file_auto(
         self,
         session_file: Path,
-        do_pkce: Optional[bool] = False,
+        do_pkce: bool | None = False,
         fn_print: Callable[[str], None] = print,
     ) -> bool:
         """
         Logs in to the TIDAL api using an existing OAuth/PKCE session file,
         automatically opening the browser for authentication if needed.
-        
+
         :param session_file: The session json file
         :param do_pkce: Perform PKCE login. Default: Use OAuth logon
         :param fn_print: A function to display information

@@ -12,20 +12,19 @@ Usage:
     uv run python start_mcp_http.py [--port PORT] [--host HOST]
 
 Environment variables:
-    MCP_HTTP_PORT: Port for the MCP HTTP server (default: 8100)
-    TIDAL_MCP_PORT: Port for the FastAPI backend (default: 5050)
+    PORT: Port for the MCP HTTP server (CloudRun compatible, default: 8080)
+    MCP_HTTP_PORT: Port for the MCP HTTP server (alternative to PORT, default: 8080)
 """
-import sys
-import os
+
 import argparse
-from pathlib import Path
+import os
+import sys
 
 # Add current directory to Python path
-sys.path.append('.')
+sys.path.append(".")
 
 # Check if required modules are available
 try:
-    from mcp.server.fastmcp import FastMCP
     import uvicorn
 except ImportError:
     print("ERROR: Required dependencies are not installed.", file=sys.stderr)
@@ -35,8 +34,8 @@ except ImportError:
     sys.exit(1)
 
 # Import the MCP server
-from mcp_server.server import mcp
 from mcp_server.logger import logger
+from mcp_server.server import mcp
 
 
 def main():
@@ -44,43 +43,40 @@ def main():
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("MCP_HTTP_PORT", 8100)),
-        help="Port for the MCP HTTP server (default: 8100)"
+        default=int(os.environ.get("PORT", os.environ.get("MCP_HTTP_PORT", 8080))),
+        help="Port for the MCP HTTP server (default: 8080, supports PORT env var for CloudRun)",
     )
     parser.add_argument(
-        "--host",
-        type=str,
-        default="127.0.0.1",
-        help="Host to bind to (default: 127.0.0.1)"
+        "--host", type=str, default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)"
     )
-    
+
     args = parser.parse_args()
-    
-    logger.info(f'Starting TIDAL MCP server in HTTP mode on {args.host}:{args.port}...')
-    logger.info(f'FastAPI backend will run on port {os.environ.get("TIDAL_MCP_PORT", 5050)}')
-    logger.info(f'Connect Cursor to: http://{args.host}:{args.port}/sse')
-    logger.info('Press Ctrl+C to stop the server')
-    
+
+    logger.info(f"Starting TIDAL MCP server in HTTP mode on {args.host}:{args.port}...")
+    logger.info(f"Connect Cursor to: http://{args.host}:{args.port}/sse")
+    logger.info("Press Ctrl+C to stop the server")
+
     # Set the port environment variable for the SSE transport
     os.environ["MCP_HTTP_PORT"] = str(args.port)
-    
-    # FastMCP supports SSE transport for HTTP mode
-    # Use sse_app() to get the FastAPI app and run it with uvicorn
+
     try:
-        # Get the FastAPI app from FastMCP for SSE transport
         app = mcp.sse_app()
-        
-        # Run with uvicorn on the specified host and port
+
+        # Add health check endpoint for cloud container services
+        # FastMCP's sse_app() returns a Starlette app, not FastAPI
+        from starlette.responses import JSONResponse
+
+        @app.route("/health", methods=["GET"])
+        async def health(request):
+            """Health check endpoint for cloud container services"""
+            return JSONResponse({"status": "healthy", "service": "tidal-mcp"})
+
         logger.info(f"Starting HTTP server on http://{args.host}:{args.port}")
-        uvicorn.run(
-            app,
-            host=args.host,
-            port=args.port,
-            log_level="info"
-        )
+        uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     except Exception as e:
         logger.error(f"Failed to start HTTP server: {e}")
         import traceback
+
         traceback.print_exc()
         logger.info("Falling back to stdio mode...")
         # Fallback to stdio if HTTP fails
@@ -89,4 +85,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

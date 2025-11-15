@@ -11,4 +11,7 @@ wheels/
 
 # Others
 play.ipynb
-ngrok.yml
+.local/
+
+# Deployment configuration
+.deploy.yml

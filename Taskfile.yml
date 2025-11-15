@@ -1,7 +1,10 @@
 version: '3'
 
+includes:
+  deploy: .deploy.yml
+
 vars:
-  HTTP_PORT: "8100"
+  HTTP_PORT: "8080"
 
 tasks:
   default:
@@ -13,6 +16,64 @@ tasks:
     desc: Setup project - install dependencies
     cmds:
       - uv pip install --editable .
+
+  setup-dev:
+    desc: Setup project with dev dependencies
+    cmds:
+      - uv pip install --editable ".[dev]"
+
+  check:
+    desc: Check code style with ruff
+    cmds:
+      - uv run ruff check .
+
+  check-fix:
+    desc: Check and fix code style issues with ruff
+    cmds:
+      - uv run ruff check --fix .
+      - uv run ruff format .
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format .
+
+  test:
+    desc: Run tests with pytest
+    cmds:
+      - uv run pytest
+
+  test-verbose:
+    desc: Run tests with verbose output
+    cmds:
+      - uv run pytest -v
+
+  test-cov:
+    desc: Run tests with coverage report
+    cmds:
+      - uv run pytest --cov
+
+  test-unit:
+    desc: Run unit tests only
+    cmds:
+      - uv run pytest tests/unit -v
+
+  test-integration:
+    desc: Run integration tests only
+    cmds:
+      - uv run pytest tests/integration -v
+
+  lint:
+    desc: Run all linting checks (ruff check + format)
+    cmds:
+      - task: check
+      - task: format
+
+  ci:
+    desc: Run CI checks (lint + test)
+    cmds:
+      - task: check
+      - task: test
 
   dev:
     desc: Run MCP server in HTTP mode for local development
@@ -44,3 +105,24 @@ tasks:
         echo "    }"
         echo "  }"
         echo "}"
+
+  docker-build:
+    desc: Build Docker image for TIDAL MCP using buildx
+    cmds:
+      - docker buildx build --pull --load -t {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} .
+
+  docker-dev:
+    desc: Launch TIDAL MCP server using docker-compose for local development
+    cmds:
+      - docker compose up
+
+  docker-push:
+    desc: Push Docker image to GCP Artifact Registry
+    cmds:
+      - |
+        set -e
+        docker image inspect {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} >/dev/null 2>&1 || \
+        { echo "Error: Image {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} not found. Run 'task docker-build' first" >&2; exit 1; }
+        FULL_IMAGE="{{.GCP_REGISTRY_LOCATION}}-docker.pkg.dev/{{.GCP_PROJECT_ID}}/{{.GCP_REPOSITORY}}/{{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}}"
+        docker tag "{{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}}" "$FULL_IMAGE"
+        docker push "$FULL_IMAGE"

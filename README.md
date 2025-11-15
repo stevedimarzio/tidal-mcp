@@ -17,8 +17,12 @@ The LLM filters and curates results using your input, finds similar tracks via T
 
 ## Features
 
-- 🌟 **Music Recommendations**: Get personalized track recommendations based on your listening history **plus your custom criteria**.
-- ၊၊||၊ **Playlist Management**: Create, view, and manage your TIDAL playlists
+- 🔐 **OAuth2 Authentication**: Secure browser-based login flow for TIDAL account access
+- 🌟 **Music Recommendations**: Get personalized track recommendations based on your favorites or specific tracks, with custom filtering criteria
+- 📋 **Playlist Management**: Create, view, browse, and delete your TIDAL playlists
+- 🔍 **Music Search**: Search TIDAL's catalog for tracks, albums, and artists
+- ❤️ **Favorites Access**: Retrieve and explore your favorite tracks
+- 🐳 **Docker Support**: Run in containers with health checks for cloud deployment
 
 ## Quick Start
 
@@ -55,13 +59,122 @@ uv run python start_mcp.py
 uv run mcp run mcp_server/server.py
 
 # Option 3: HTTP mode (for debugging with Cursor)
-uv run python start_mcp_http.py --port 8100
+uv run python start_mcp_http.py --port 8080
 ```
 
 **Note:** Always use `uv run` to ensure all dependencies are available in the correct environment.
 
 **HTTP Mode for Debugging:** If you want to debug the MCP server or connect it to Cursor via HTTP, use `start_mcp_http.py`. See [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md) for detailed instructions.
 
+### Running with Docker
+
+You can also run the TIDAL MCP server using Docker, which simplifies deployment and ensures consistent environments.
+
+#### Prerequisites
+
+- Docker and Docker Compose installed
+- TIDAL subscription
+
+#### Building the Docker Image
+
+Build the Docker image from the project root:
+
+```bash
+docker build -t tidal-mcp:latest .
+```
+
+#### Running with Docker
+
+**Option 1: Using Docker Compose (Recommended)**
+
+The easiest way to run the server is using Docker Compose:
+
+```bash
+docker compose up
+```
+
+Or use the task command:
+
+```bash
+task docker-dev
+```
+
+This will:
+- Build the image if it doesn't exist
+- Start the server in HTTP mode on port 8080
+- Mount the `data/sessions` directory for session persistence
+- Run health checks using curl (as cloud services do)
+
+To run in detached mode:
+
+```bash
+docker compose up -d
+```
+
+To stop the server:
+
+```bash
+docker compose down
+```
+
+**Option 2: Using Docker directly**
+
+Run the container with HTTP mode (default):
+
+```bash
+docker run -p 8080:8080 \
+  -v $(pwd)/data/sessions:/app/data/sessions \
+  tidal-mcp:latest
+```
+
+Run in stdio mode:
+
+```bash
+docker run tidal-mcp:latest python start_mcp.py
+```
+
+#### Environment Variables
+
+You can customize the server behavior using environment variables:
+
+- `PORT` or `MCP_HTTP_PORT`: Port for the MCP HTTP server (default: `8080`, CloudRun compatible)
+- `HOST`: Host to bind to (default: `0.0.0.0` for Docker, `127.0.0.1` for local)
+
+Example with custom port:
+
+```bash
+docker run -p 9000:9000 \
+  -e PORT=9000 \
+  -v $(pwd)/data/sessions:/app/data/sessions \
+  tidal-mcp:latest
+```
+
+Or with docker-compose, modify the `environment` section in `docker-compose.yml`.
+
+#### Volume Mounts
+
+The `data/sessions` directory is mounted as a volume to persist TIDAL authentication sessions across container restarts. This ensures you don't need to re-authenticate every time the container is restarted.
+
+#### Connecting to the Docker Container
+
+When running in HTTP mode, connect your MCP client to:
+
+```
+http://localhost:8080/sse
+```
+
+For Cursor configuration, use:
+
+```json
+{
+  "mcpServers": {
+    "TIDAL MCP (Docker)": {
+      "url": "http://localhost:8080/sse",
+      "transport": "sse"
+    }
+  }
+}
+```
 
 ## MCP Client Configuration
 
@@ -102,9 +215,7 @@ The configuration file location depends on your operating system:
   "mcpServers": {
     "TIDAL Integration": {
       "command": "/opt/homebrew/bin/uv",
-      "env": {
-        "TIDAL_MCP_PORT": "5050"
-      },
+      "env": {},
       "args": [
         "run",
         "--with",
@@ -129,7 +240,6 @@ The configuration file location depends on your operating system:
 **Important**: Replace the following in the configuration:
 - `/opt/homebrew/bin/uv` → Your actual `uv` path (from Step 1)
 - `/path/to/your/tidal-mcp/mcp_server/server.py` → Your actual project path (from Step 1)
-- `"5050"` → Optional: Change the port if 5050 is already in use
 
 #### Step 4: Save and Restart
 
@@ -146,9 +256,7 @@ If you prefer to use the start script directly, you can use this alternative con
   "mcpServers": {
     "TIDAL Integration": {
       "command": "/opt/homebrew/bin/uv",
-      "env": {
-        "TIDAL_MCP_PORT": "5050"
-      },
+      "env": {},
       "args": [
         "run",
         "python",
@@ -176,7 +284,7 @@ To use the MCP server with Cursor in HTTP mode for debugging:
 
 1. **Start the server in HTTP mode:**
    ```bash
-   uv run python start_mcp_http.py --port 8100
+   uv run python start_mcp_http.py --port 8080
    ```
 
 2. **Configure Cursor:**
@@ -187,7 +295,7 @@ To use the MCP server with Cursor in HTTP mode for debugging:
    {
      "mcpServers": {
        "TIDAL MCP (HTTP)": {
-         "url": "http://127.0.0.1:8100/sse",
+         "url": "http://127.0.0.1:8080/sse",
          "transport": "sse"
        }
      }
@@ -206,7 +314,7 @@ For detailed instructions and troubleshooting, see the [HTTP Debug Setup Guide](
 - Check that all dependencies are installed: `uv pip install --editable .`
 
 **Port already in use:**
-- Change `TIDAL_MCP_PORT` to a different port (e.g., "5100", "8080")
+- Change `PORT` or `MCP_HTTP_PORT` to a different port (e.g., "9000")
 - Make sure no other instance of the server is running
 
 **Import errors:**
@@ -249,23 +357,29 @@ Once configured, you can interact with your TIDAL account through Claude by aski
 The TIDAL MCP integration provides the following tools:
 
 ### Authentication
-- **`tidal_login`**: Authenticate with TIDAL through browser login flow. Opens a browser window for OAuth authentication.
+- **`tidal_login()`**: Authenticate with TIDAL through OAuth2 browser login flow. Opens a browser window for secure authentication and stores the session for future use.
 
-### Tracks & Recommendations
-- **`get_favorite_tracks`**: Retrieve your favorite tracks from TIDAL account
-- **`recommend_tracks`**: Get personalized music recommendations based on your favorites or specific track IDs. Supports filtering criteria.
+### Favorites & Recommendations
+- **`get_favorite_tracks(limit: int = 20)`**: Retrieve your favorite tracks from your TIDAL account. Returns track information including ID, title, artist, album, duration, and TIDAL URLs.
+- **`recommend_tracks(track_ids: list[str] | None = None, filter_criteria: str | None = None, limit_per_track: int = 20, limit_from_favorite: int = 20)`**: Get personalized music recommendations based on:
+  - Your favorite tracks (if no track IDs provided)
+  - Specific track IDs you provide
+  - Optional filtering criteria (e.g., "relaxing", "recent releases", "upbeat", "jazz influences")
+  - Returns seed tracks and recommended tracks with full metadata
 
 ### Playlist Management
-- **`create_tidal_playlist`**: Create a new playlist in your TIDAL account with specified tracks
-- **`get_user_playlists`**: List all your playlists on TIDAL (sorted by last updated)
-- **`get_playlist_tracks`**: Retrieve all tracks from a specific playlist
-- **`delete_tidal_playlist`**: Delete a playlist from your TIDAL account
+- **`create_tidal_playlist(title: str, track_ids: list, description: str = "")`**: Create a new playlist in your TIDAL account with specified tracks. Returns playlist details including TIDAL URL.
+- **`get_user_playlists()`**: List all your playlists on TIDAL, sorted by last updated date (most recent first). Returns playlist metadata including title, track count, and TIDAL URLs.
+- **`get_playlist_tracks(playlist_id: str, limit: int = 100)`**: Retrieve all tracks from a specific playlist. Returns track information with full metadata.
+- **`delete_tidal_playlist(playlist_id: str)`**: Delete a playlist from your TIDAL account by its ID.
 
 ### Search
-- **`search_tidal`**: Search for tracks, albums, and/or artists on TIDAL
-- **`search_tidal_tracks`**: Search specifically for tracks
-- **`search_tidal_albums`**: Search specifically for albums
-- **`search_tidal_artists`**: Search specifically for artists
+- **`search_tidal(query: str, limit: int = 20, search_types: str | None = "tracks,albums,artists")`**: General search function that can search for tracks, albums, and/or artists. You can specify which types to search (e.g., "tracks", "albums,artists", or all three).
+- **`search_tidal_tracks(query: str, limit: int = 20)`**: Search specifically for tracks. Returns matching tracks with full metadata and TIDAL URLs.
+- **`search_tidal_albums(query: str, limit: int = 20)`**: Search specifically for albums. Returns matching albums with artist, release date, track count, and TIDAL URLs.
+- **`search_tidal_artists(query: str, limit: int = 20)`**: Search specifically for artists. Returns matching artists with TIDAL URLs.
+
+All search functions support up to 50 results per type and return TIDAL URLs for easy access to the content.
 
 ## License
 

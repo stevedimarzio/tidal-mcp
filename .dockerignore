@@ -1,0 +1,55 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Build artifacts
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Development files
+.git/
+.gitignore
+*.md
+docs/
+assets/
+play.ipynb
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Local data (keep directory structure but not contents)
+data/sessions/*
+!data/sessions/.gitkeep
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Other
+.local/
+*.log
+.DS_Store
+
