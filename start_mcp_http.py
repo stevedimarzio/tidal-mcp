@@ -14,6 +14,7 @@ Usage:
 Environment variables:
     PORT: Port for the MCP HTTP server (CloudRun compatible, default: 8080)
     MCP_HTTP_PORT: Port for the MCP HTTP server (alternative to PORT, default: 8080)
+    API_KEY or MCP_API_KEY: API key for authentication via x-api-key header (optional, required if set)
 """
 
 import argparse
@@ -62,14 +63,51 @@ def main():
     try:
         app = mcp.sse_app()
 
+        # Get API key from environment (optional - only enforce if set)
+        api_key = os.environ.get("API_KEY") or os.environ.get("MCP_API_KEY")
+
         # Add health check endpoint for cloud container services
         # FastMCP's sse_app() returns a Starlette app, not FastAPI
         from starlette.responses import JSONResponse
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.requests import Request
 
         @app.route("/health", methods=["GET"])
         async def health(request):
-            """Health check endpoint for cloud container services"""
+            """Health check endpoint for cloud container services (bypasses API key check)"""
             return JSONResponse({"status": "healthy", "service": "tidal-mcp"})
+
+        # Add API key authentication middleware if API key is configured
+        if api_key:
+
+            class APIKeyMiddleware(BaseHTTPMiddleware):
+                async def dispatch(self, request: Request, call_next):
+                    # Skip API key check for health endpoint
+                    if request.url.path == "/health":
+                        return await call_next(request)
+
+                    # Check for x-api-key header
+                    provided_key = request.headers.get("x-api-key")
+                    if not provided_key:
+                        logger.warning(
+                            f"API key missing for request to {request.url.path} from {request.client.host if request.client else 'unknown'}"
+                        )
+                        return JSONResponse(
+                            {"error": "Missing x-api-key header"}, status_code=401
+                        )
+
+                    if provided_key != api_key:
+                        logger.warning(
+                            f"Invalid API key for request to {request.url.path} from {request.client.host if request.client else 'unknown'}"
+                        )
+                        return JSONResponse(
+                            {"error": "Invalid API key"}, status_code=403
+                        )
+
+                    return await call_next(request)
+
+            app.add_middleware(APIKeyMiddleware)
+            logger.info("API key authentication enabled (x-api-key header required)")
 
         logger.info(f"Starting HTTP server on http://{args.host}:{args.port}")
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")

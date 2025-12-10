@@ -107,9 +107,14 @@ tasks:
         echo "}"
 
   docker-build:
-    desc: Build Docker image for TIDAL MCP using buildx
+    desc: Build Docker image for TIDAL MCP using buildx (for local use)
     cmds:
       - docker buildx build --pull --load -t {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} .
+
+  docker-build-cloud:
+    desc: Build Docker image for CloudRun/cloud deployment (linux/amd64)
+    cmds:
+      - docker buildx build --platform linux/amd64 --pull --load -t {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} .
 
   docker-dev:
     desc: Launch TIDAL MCP server using docker-compose for local development
@@ -117,12 +122,12 @@ tasks:
       - docker compose up
 
   docker-push:
-    desc: Push Docker image to GCP Artifact Registry
+    desc: Build (linux/amd64) and push Docker image to GCP Artifact Registry
+    depends: docker-build-cloud
     cmds:
       - |
         set -e
-        docker image inspect {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} >/dev/null 2>&1 || \
-        { echo "Error: Image {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} not found. Run 'task docker-build' first" >&2; exit 1; }
         FULL_IMAGE="{{.GCP_REGISTRY_LOCATION}}-docker.pkg.dev/{{.GCP_PROJECT_ID}}/{{.GCP_REPOSITORY}}/{{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}}"
-        docker tag "{{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}}" "$FULL_IMAGE"
-        docker push "$FULL_IMAGE"
+        echo "Building for linux/amd64 platform (required for CloudRun)..."
+        docker buildx build --platform linux/amd64 --pull -t "$FULL_IMAGE" --push .
+        echo "Image pushed to: $FULL_IMAGE"

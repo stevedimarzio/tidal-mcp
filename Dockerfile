@@ -60,6 +60,9 @@ EXPOSE 8080
 ENV PORT=8080
 ENV MCP_HTTP_PORT=8080
 ENV HOST=0.0.0.0
+# API_KEY or MCP_API_KEY: Optional API key for authentication via x-api-key header
+# If set, all requests (except /health) must include x-api-key header with matching value
+# Example: ENV API_KEY=your-secret-api-key-here
 
 # Default command: run MCP server in HTTP mode
 CMD ["python", "start_mcp_http.py", "--host", "0.0.0.0"]

@@ -77,11 +77,24 @@ You can also run the TIDAL MCP server using Docker, which simplifies deployment 
 
 #### Building the Docker Image
 
-Build the Docker image from the project root:
-
+**For local development:**
 ```bash
 docker build -t tidal-mcp:latest .
 ```
+
+**For CloudRun/cloud deployment (required for CloudRun):**
+CloudRun requires `linux/amd64` architecture. Build with the correct platform:
+
+```bash
+docker buildx build --platform linux/amd64 -t tidal-mcp:latest .
+```
+
+Or use the task command:
+```bash
+task docker-build-cloud
+```
+
+**⚠️ Important:** If you're building on Apple Silicon (M1/M2/M3 Mac), you must specify `--platform linux/amd64` for CloudRun deployment, otherwise you'll get an "exec format error".
 
 #### Running with Docker
 
@@ -104,6 +117,7 @@ This will:
 - Start the server in HTTP mode on port 8080
 - Mount the `data/sessions` directory for session persistence
 - Run health checks using curl (as cloud services do)
+- Enable API key authentication with default dev key: `mcptest` (via `x-api-key` header)
 
 To run in detached mode:
 
@@ -139,6 +153,7 @@ You can customize the server behavior using environment variables:
 
 - `PORT` or `MCP_HTTP_PORT`: Port for the MCP HTTP server (default: `8080`, CloudRun compatible)
 - `HOST`: Host to bind to (default: `0.0.0.0` for Docker, `127.0.0.1` for local)
+- `API_KEY` or `MCP_API_KEY`: API key for authentication via `x-api-key` header (default in docker-compose: `mcptest` for development, **change in production!**)
 
 Example with custom port:
 
@@ -163,6 +178,8 @@ When running in HTTP mode, connect your MCP client to:
 http://localhost:8080/sse
 ```
 
+**Note:** The Docker Compose setup uses API key authentication by default (dev key: `mcptest`). You must include the `x-api-key` header in your requests.
+
 For Cursor configuration, use:
 
 ```json
@@ -170,11 +187,121 @@ For Cursor configuration, use:
   "mcpServers": {
     "TIDAL MCP (Docker)": {
       "url": "http://localhost:8080/sse",
-      "transport": "sse"
+      "transport": "sse",
+      "headers": {
+        "x-api-key": "mcptest"
+      }
     }
   }
 }
 ```
+
+**⚠️ Important:** The default API key `mcptest` is for **development only**. For production deployments, set a strong, unique API key via the `API_KEY` environment variable.
+
+### Cloud Deployment (CloudRun, ECS, Azure Container Apps)
+
+The container is designed to work with cloud container services. Here's how to configure it:
+
+#### Google Cloud Run
+
+1. **Build your Docker image for CloudRun** (must be linux/amd64):
+   ```bash
+   docker buildx build --platform linux/amd64 -t gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest .
+   ```
+
+2. **Push to Google Container Registry or Artifact Registry**:
+   ```bash
+   docker push gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest
+   ```
+
+3. **Deploy to CloudRun** with environment variables:
+
+```bash
+gcloud run deploy tidal-mcp \
+  --image gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars API_KEY=your-production-api-key-here \
+  --port 8080
+```
+
+Or using the Cloud Console:
+- Go to Cloud Run → Create Service
+- Set the container image
+- Under **Container, Networking, Security** → **Variables & Secrets**:
+  - Add environment variable: `API_KEY` = `your-production-api-key-here`
+  - The `PORT` variable is automatically set by CloudRun (defaults to 8080)
+
+3. **Access your service**: CloudRun will provide a URL like `https://tidal-mcp-xxxxx.run.app`
+
+4. **Configure your MCP client** to use the CloudRun URL with the API key:
+
+```json
+{
+  "mcpServers": {
+    "TIDAL MCP (CloudRun)": {
+      "url": "https://tidal-mcp-xxxxx.run.app/sse",
+      "transport": "sse",
+      "headers": {
+        "x-api-key": "your-production-api-key-here"
+      }
+    }
+  }
+}
+```
+
+**Security Best Practices:**
+- Use Google Secret Manager for sensitive values:
+  ```bash
+  gcloud run deploy tidal-mcp \
+    --image gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest \
+    --update-secrets API_KEY=api-key-secret:latest
+  ```
+- Never commit API keys to version control
+- Use different API keys for different environments (dev, staging, prod)
+- Rotate API keys regularly
+
+#### AWS ECS / Fargate
+
+Set the `API_KEY` environment variable in your task definition:
+
+```json
+{
+  "containerDefinitions": [{
+    "name": "tidal-mcp",
+    "image": "your-ecr-repo/tidal-mcp:latest",
+    "environment": [
+      {
+        "name": "API_KEY",
+        "value": "your-production-api-key-here"
+      },
+      {
+        "name": "PORT",
+        "value": "8080"
+      }
+    ],
+    "portMappings": [{
+      "containerPort": 8080
+    }]
+  }]
+}
+```
+
+#### Azure Container Apps
+
+Set environment variables in your Container App configuration:
+
+```bash
+az containerapp create \
+  --name tidal-mcp \
+  --resource-group your-resource-group \
+  --image your-registry.azurecr.io/tidal-mcp:latest \
+  --target-port 8080 \
+  --env-vars API_KEY=your-production-api-key-here PORT=8080
+```
+
+**Note:** The `/health` endpoint bypasses API key authentication, which is required for cloud health checks to work properly.
 
 ## MCP Client Configuration
 
@@ -283,14 +410,25 @@ Example screenshot of the MCP configuration in Claude Desktop:
 To use the MCP server with Cursor in HTTP mode for debugging:
 
 1. **Start the server in HTTP mode:**
+   
+   **Option A: Local development (no API key required):**
    ```bash
    uv run python start_mcp_http.py --port 8080
+   ```
+   
+   **Option B: With Docker (API key required):**
+   ```bash
+   docker compose up
+   # or
+   task docker-dev
    ```
 
 2. **Configure Cursor:**
    - Open Cursor Settings
    - Navigate to MCP/Model Context Protocol settings
    - Add the following configuration:
+   
+   **For local development (no API key):**
    ```json
    {
      "mcpServers": {
@@ -301,8 +439,25 @@ To use the MCP server with Cursor in HTTP mode for debugging:
      }
    }
    ```
+   
+   **For Docker (with API key):**
+   ```json
+   {
+     "mcpServers": {
+       "TIDAL MCP (HTTP)": {
+         "url": "http://127.0.0.1:8080/sse",
+         "transport": "sse",
+         "headers": {
+           "x-api-key": "mcptest"
+         }
+       }
+     }
+   }
+   ```
 
 3. **Restart Cursor** and verify the connection
+
+**Note:** When running locally without Docker, API key authentication is optional (only required if `API_KEY` environment variable is set). When using Docker Compose, the default dev API key `mcptest` is required.
 
 For detailed instructions and troubleshooting, see the [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md).
 
