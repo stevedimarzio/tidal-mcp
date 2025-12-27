@@ -675,3 +675,7 @@ def search_tidal_artists(query: str, limit: int = 20) -> dict:
     except Exception as e:
         logger.error(f"Error searching artists: {e}", exc_info=True)
         return {"status": "error", "message": f"Artist search failed: {str(e)}"}
+
+
+# Server can be run using: fastmcp run mcp_server/server.py --host 0.0.0.0 --port 8080
+# FastMCP CLI automatically detects the 'mcp' object and runs it

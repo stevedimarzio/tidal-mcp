@@ -75,7 +75,7 @@ tasks:
   dev:
     desc: Run MCP server in HTTP mode for local development
     cmds:
-      - uv run uvicorn app:app --host 127.0.0.1 --port {{.HTTP_PORT}}
+      - uv run fastmcp run mcp_server/server.py --host 127.0.0.1 --port {{.HTTP_PORT}} --transport http
 
   print-cursor-config:
     desc: Print copy&paste ready config for Cursor local debug

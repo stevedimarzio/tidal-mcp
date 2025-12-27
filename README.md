@@ -52,12 +52,18 @@ The LLM filters and curates results using your input, finds similar tracks via T
 To run the MCP server in HTTP mode:
 
 ```bash
-uv run uvicorn app:app --host 127.0.0.1 --port 8080
+uv run fastmcp run mcp_server/server.py --host 127.0.0.1 --port 8080 --transport http
+```
+
+Or for production (accepting connections from all interfaces):
+
+```bash
+uv run fastmcp run mcp_server/server.py --host 0.0.0.0 --port 8080 --transport http
 ```
 
 **Note:** Always use `uv run` to ensure all dependencies are available in the correct environment.
 
-The server will be available at `http://127.0.0.1:8080` (or configure with `--host` and `--port`). For production, use `--host 0.0.0.0` to accept connections from all interfaces.
+The server will be available at `http://127.0.0.1:8080` by default. Use `--host` and `--port` flags to customize the binding address and port.
 
 ### Running with Docker
 
@@ -110,7 +116,6 @@ This will:
 - Start the server in HTTP mode on port 8080
 - Mount the `data/sessions` directory for session persistence
 - Run health checks using curl (as cloud services do)
-- Enable API key authentication with default dev key: `mcptest` (via `X-API-KEY` header)
 
 To run in detached mode:
 
@@ -139,14 +144,14 @@ docker run -p 8080:8080 \
 You can customize the server behavior using environment variables:
 
 - `PORT`: Port for the MCP HTTP server (default: `8080`)
-- `HOST`: Host to bind to (default: `0.0.0.0` for Docker, `127.0.0.1` for local)
-- `API_KEY`: API key for authentication via `X-API-KEY` header (default in docker-compose: `mcptest` for development, **change in production!**)
+- `HOST`: Host to bind to (default: `0.0.0.0` for Docker)
 
 Example with custom port:
 
 ```bash
 docker run -p 9000:9000 \
   -e PORT=9000 \
+  -e HOST=0.0.0.0 \
   -v $(pwd)/data/sessions:/app/data/sessions \
   tidal-mcp:latest
 ```
@@ -165,8 +170,6 @@ When running in HTTP mode, connect your MCP client to:
 http://localhost:8080/mcp
 ```
 
-**Note:** The Docker Compose setup uses API key authentication by default (dev key: `mcptest`). You must include the `X-API-KEY` header in your requests.
-
 For Cursor configuration, use:
 
 ```json
@@ -174,16 +177,11 @@ For Cursor configuration, use:
   "mcpServers": {
     "TIDAL MCP (Docker)": {
       "url": "http://localhost:8080/mcp",
-      "transport": "sse",
-      "headers": {
-        "X-API-KEY": "mcptest"
-      }
+      "transport": "sse"
     }
   }
 }
 ```
-
-**⚠️ Important:** The default API key `mcptest` is for **development only**. For production deployments, set a strong, unique API key via the `API_KEY` environment variable.
 
 ### Cloud Deployment
 
@@ -208,27 +206,19 @@ FastMCP Cloud provides free hosting for personal MCP servers. To deploy:
    fastmcp cloud deploy
    ```
 
-4. **Set your API key** (for authentication):
-   ```bash
-   fastmcp cloud env set API_KEY=your-production-api-key-here
-   ```
-
-5. **Get your server URL**:
+4. **Get your server URL**:
    ```bash
    fastmcp cloud status
    ```
 
-6. **Configure your MCP client** to use the FastMCP Cloud URL:
+5. **Configure your MCP client** to use the FastMCP Cloud URL:
 
 ```json
 {
   "mcpServers": {
     "TIDAL MCP (FastMCP Cloud)": {
       "url": "https://your-server.fastmcp.cloud/mcp",
-      "transport": "sse",
-      "headers": {
-        "X-API-KEY": "your-production-api-key-here"
-      }
+      "transport": "sse"
     }
   }
 }
@@ -241,10 +231,9 @@ For more details, see the [FastMCP Cloud documentation](https://gofastmcp.com/).
 The container can be deployed to any cloud container service (AWS ECS, Azure Container Apps, etc.):
 
 **Key Configuration:**
-- Set `API_KEY` environment variable for authentication
 - Set `PORT=8080` (or let the service auto-detect)
 - Expose port 8080
-- The `/health` endpoint bypasses API key authentication for health checks
+- The `/health` endpoint is available for health checks
 
 **Example for AWS ECS / Fargate:**
 
@@ -254,10 +243,6 @@ The container can be deployed to any cloud container service (AWS ECS, Azure Con
     "name": "tidal-mcp",
     "image": "your-ecr-repo/tidal-mcp:latest",
     "environment": [
-      {
-        "name": "API_KEY",
-        "value": "your-production-api-key-here"
-      },
       {
         "name": "PORT",
         "value": "8080"
@@ -278,14 +263,13 @@ az containerapp create \
   --resource-group your-resource-group \
   --image your-registry.azurecr.io/tidal-mcp:latest \
   --target-port 8080 \
-  --env-vars API_KEY=your-production-api-key-here PORT=8080
+  --env-vars PORT=8080
 ```
 
 **Security Best Practices:**
-- Never commit API keys to version control
-- Use different API keys for different environments (dev, staging, prod)
-- Rotate API keys regularly
-- Use your cloud provider's secret management service for sensitive values
+- Use HTTPS for production deployments
+- Consider using your cloud provider's network security features (firewalls, VPCs)
+- Monitor server logs for unusual activity
 
 ## MCP Client Configuration
 
@@ -295,12 +279,17 @@ To use the MCP server with Cursor in HTTP mode for debugging:
 
 1. **Start the server in HTTP mode:**
    
-   **Option A: Local development (no API key required):**
+   **Option A: Local development:**
    ```bash
-   uv run uvicorn app:app --host 127.0.0.1 --port 8080
+   uv run fastmcp run mcp_server/server.py --host 127.0.0.1 --port 8080 --transport http
    ```
    
-   **Option B: With Docker (API key required):**
+   Or use the task command:
+   ```bash
+   task dev
+   ```
+   
+   **Option B: With Docker:**
    ```bash
    docker compose up
    # or
@@ -312,7 +301,6 @@ To use the MCP server with Cursor in HTTP mode for debugging:
    - Navigate to MCP/Model Context Protocol settings
    - Add the following configuration:
    
-   **For local development (no API key):**
    ```json
    {
      "mcpServers": {
@@ -323,25 +311,8 @@ To use the MCP server with Cursor in HTTP mode for debugging:
      }
    }
    ```
-   
-   **For Docker (with API key):**
-   ```json
-   {
-     "mcpServers": {
-      "TIDAL MCP (HTTP)": {
-        "url": "http://127.0.0.1:8080/mcp",
-        "transport": "sse",
-        "headers": {
-          "X-API-KEY": "mcptest"
-         }
-       }
-     }
-   }
-   ```
 
 3. **Restart Cursor** and verify the connection
-
-**Note:** When running locally without Docker, API key authentication is optional (only required if `API_KEY` environment variable is set). When using Docker Compose, the default dev API key `mcptest` is required.
 
 For detailed instructions and troubleshooting, see the [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md).
 
@@ -353,7 +324,6 @@ To integrate a remote `tidal-mcp` server with Mistral AI using connectors, follo
 
 1. **Deploy your TIDAL MCP server** to a publicly accessible URL (e.g., FastMCP Cloud, ECS, Azure Container Apps, or any HTTPS endpoint)
 2. **Note your server URL** - it should be in the format: `https://your-domain.com/mcp` or `https://your-server.fastmcp.cloud/mcp`
-3. **Have your API key ready** - the API key you configured when deploying the server (via `API_KEY` environment variable)
 
 #### Step 1: Access Connectors in Mistral
 
@@ -381,9 +351,6 @@ Fill in the connector configuration with the following details:
   https://your-server.fastmcp.cloud/mcp
   ```
 - **Description** (optional): `TIDAL music integration for recommendations, playlists, and search`
-- **Authentication Method**: Select **API Key** or **Custom Header** (depending on Mistral's options)
-- **API Key Header**: `X-API-KEY`
-- **API Key Value**: Your production API key (the one you set via `API_KEY` environment variable)
 
 **Example Configuration:**
 
@@ -393,10 +360,7 @@ If Mistral uses a JSON configuration format, use:
 {
   "name": "TIDAL MCP",
   "url": "https://your-server.fastmcp.cloud/mcp",
-  "transport": "sse",
-  "headers": {
-    "X-API-KEY": "your-production-api-key-here"
-  }
+  "transport": "sse"
 }
 ```
 
@@ -421,7 +385,6 @@ If Mistral uses a JSON configuration format, use:
 **Connection fails:**
 - Verify your server URL is correct and includes `/mcp` endpoint
 - Ensure your server is publicly accessible (not behind a firewall)
-- Check that your API key matches the one configured on the server
 - Verify the server is running and responding to health checks: `curl https://your-domain.com/health`
 
 **"Request validation failed" error:**
@@ -430,10 +393,6 @@ If Mistral uses a JSON configuration format, use:
 - If you're still experiencing this error, ensure you're using the latest Docker image version
 - You can override the forwarded IPs configuration via the `FORWARDED_ALLOW_IPS` environment variable if needed
 
-**Authentication errors:**
-- Double-check the API key header name is exactly `X-API-KEY` (case-insensitive, but use uppercase for consistency)
-- Verify the API key value matches your server's `API_KEY` environment variable
-- Ensure your server has API key authentication enabled (set `API_KEY` environment variable)
 
 **Tools not appearing:**
 - Make sure the connector is enabled in the Tools menu for your conversation
@@ -449,8 +408,6 @@ If Mistral uses a JSON configuration format, use:
 #### Security Best Practices
 
 - **Use HTTPS**: Always use HTTPS URLs for remote connections (never HTTP)
-- **Strong API Keys**: Use a strong, unique API key for production (not the default `mcptest`)
-- **Rotate Keys**: Regularly rotate your API keys for security
 - **Monitor Access**: Review your server logs to monitor connector usage
 - **Restrict Access**: Consider IP whitelisting if your cloud provider supports it
 
@@ -461,9 +418,6 @@ If deploying to FastMCP Cloud for Mistral:
 ```bash
 # Deploy with FastMCP Cloud
 fastmcp cloud deploy
-
-# Set your production API key
-fastmcp cloud env set API_KEY=your-secure-production-key-here
 
 # Get your server URL
 fastmcp cloud status
