@@ -17,7 +17,7 @@ The LLM filters and curates results using your input, finds similar tracks via T
 
 ## Features
 
-- 🔐 **OAuth2 Authentication**: Secure browser-based login flow for TIDAL account access
+- 🔐 **OAuth2 Authentication**: Secure browser-based login flow with cloud deployment support. Returns auth URL immediately for remote access.
 - 🌟 **Music Recommendations**: Get personalized track recommendations based on your favorites or specific tracks, with custom filtering criteria
 - 📋 **Playlist Management**: Create, view, browse, and delete your TIDAL playlists
 - 🔍 **Music Search**: Search TIDAL's catalog for tracks, albums, and artists
@@ -464,7 +464,8 @@ Once configured, you can interact with your TIDAL account by asking questions li
 The TIDAL MCP integration provides the following tools:
 
 ### Authentication
-- **`tidal_login()`**: Authenticate with TIDAL through OAuth2 browser login flow. Opens a browser window for secure authentication and stores the session for future use.
+- **`tidal_login(session_id: str | None = None)`**: Start TIDAL authentication flow. Returns the authentication URL immediately (non-blocking) for cloud deployment compatibility. Returns a `session_id` that should be used for subsequent requests. For HTTP endpoints, use `POST /auth/login` which sets a session cookie automatically.
+- **`check_login_status(session_id: str)`**: Check if authentication has completed. Use this after calling `tidal_login()` to poll for completion. For HTTP endpoints, use `GET /auth/status` which reads the session cookie automatically.
 
 ### Favorites & Recommendations
 - **`get_favorite_tracks(limit: int = 20)`**: Retrieve your favorite tracks from your TIDAL account. Returns track information including ID, title, artist, album, duration, and TIDAL URLs.
@@ -475,16 +476,18 @@ The TIDAL MCP integration provides the following tools:
   - Returns seed tracks and recommended tracks with full metadata
 
 ### Playlist Management
-- **`create_tidal_playlist(title: str, track_ids: list, description: str = "")`**: Create a new playlist in your TIDAL account with specified tracks. Returns playlist details including TIDAL URL.
-- **`get_user_playlists()`**: List all your playlists on TIDAL, sorted by last updated date (most recent first). Returns playlist metadata including title, track count, and TIDAL URLs.
-- **`get_playlist_tracks(playlist_id: str, limit: int = 100)`**: Retrieve all tracks from a specific playlist. Returns track information with full metadata.
-- **`delete_tidal_playlist(playlist_id: str)`**: Delete a playlist from your TIDAL account by its ID.
+- **`create_tidal_playlist(title: str, track_ids: list, description: str = "", session_id: str | None = None)`**: Create a new playlist in your TIDAL account with specified tracks. Returns playlist details including TIDAL URL.
+- **`get_user_playlists(session_id: str | None = None)`**: List all your playlists on TIDAL, sorted by last updated date (most recent first). Returns playlist metadata including title, track count, and TIDAL URLs.
+- **`get_playlist_tracks(playlist_id: str, limit: int = 100, session_id: str | None = None)`**: Retrieve all tracks from a specific playlist. Returns track information with full metadata.
+- **`delete_tidal_playlist(playlist_id: str, session_id: str | None = None)`**: Delete a playlist from your TIDAL account by its ID.
 
 ### Search
-- **`search_tidal(query: str, limit: int = 20, search_types: str | None = "tracks,albums,artists")`**: General search function that can search for tracks, albums, and/or artists. You can specify which types to search (e.g., "tracks", "albums,artists", or all three).
-- **`search_tidal_tracks(query: str, limit: int = 20)`**: Search specifically for tracks. Returns matching tracks with full metadata and TIDAL URLs.
-- **`search_tidal_albums(query: str, limit: int = 20)`**: Search specifically for albums. Returns matching albums with artist, release date, track count, and TIDAL URLs.
-- **`search_tidal_artists(query: str, limit: int = 20)`**: Search specifically for artists. Returns matching artists with TIDAL URLs.
+- **`search_tidal(query: str, limit: int = 20, search_types: str | None = "tracks,albums,artists", session_id: str | None = None)`**: General search function that can search for tracks, albums, and/or artists. You can specify which types to search (e.g., "tracks", "albums,artists", or all three).
+- **`search_tidal_tracks(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for tracks. Returns matching tracks with full metadata and TIDAL URLs.
+- **`search_tidal_albums(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for albums. Returns matching albums with artist, release date, track count, and TIDAL URLs.
+- **`search_tidal_artists(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for artists. Returns matching artists with TIDAL URLs.
+
+**Note:** All tools accept an optional `session_id` parameter. If not provided, the default session or session from HTTP cookies will be used. For cloud deployments, it's recommended to use the session_id returned from `tidal_login()`.
 
 All search functions support up to 50 results per type and return TIDAL URLs for easy access to the content.
 

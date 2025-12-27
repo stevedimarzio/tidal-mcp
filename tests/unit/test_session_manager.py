@@ -24,7 +24,7 @@ class TestSessionManager:
         manager = SessionManager()
         path = manager.get_session_file_path()
         assert isinstance(path, Path)
-        assert path.name == "session.json"
+        assert path.name == "default.json"  # Changed to default.json for per-user sessions
 
     @patch("tidal_api.session_manager.BrowserSession")
     @patch("tidal_api.session_manager.Path.exists")
@@ -54,19 +54,22 @@ class TestSessionManager:
     @patch("tidal_api.session_manager.BrowserSession")
     @patch("tidal_api.session_manager.Path.exists")
     def test_authenticate_success(self, mock_exists, mock_browser_session):
-        """Test successful authentication."""
+        """Test successful authentication (non-blocking flow)."""
         mock_exists.return_value = False
         mock_session = Mock()
-        mock_session.login_session_file_auto.return_value = True
-        mock_session.user = Mock()
-        mock_session.user.id = "12345"
+        # Mock the new non-blocking login flow
+        mock_session.start_oauth_login.return_value = ("https://auth.url", 300, Mock())
+        mock_session.check_login.return_value = False  # Not logged in yet
         mock_browser_session.return_value = mock_session
 
         manager = SessionManager()
         result = manager.authenticate()
 
-        assert result["status"] == "success"
-        assert result["user_id"] == "12345"
+        # Now returns pending status with auth_url
+        assert result["status"] == "pending"
+        assert "auth_url" in result
+        assert "session_id" in result
+        assert "expires_in" in result
 
     @patch("tidal_api.session_manager.BrowserSession")
     @patch("tidal_api.session_manager.Path.exists")

@@ -12,8 +12,8 @@ except ImportError:
 class ISessionManager(Protocol):
     """Protocol for session management."""
 
-    def get_authenticated_session(self) -> BrowserSession:
-        """Get an authenticated TIDAL session."""
+    def get_authenticated_session(self, session_id: str | None = None) -> BrowserSession:
+        """Get an authenticated TIDAL session for a specific user."""
         ...
 
     def authenticate(self) -> dict:

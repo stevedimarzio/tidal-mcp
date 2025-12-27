@@ -71,10 +71,15 @@ class TidalService:
             session_manager: Session manager for authentication
         """
         self.session_manager = session_manager
+        self._current_session_id: str | None = None
+
+    def set_session_id(self, session_id: str | None) -> None:
+        """Set the current session ID for this service instance."""
+        self._current_session_id = session_id
 
     def get_favorite_tracks(self, limit: int = 20) -> TracksResponse:
         """Get tracks from user's favorites."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         favorites = session.user.favorites
         limit = bound_limit(limit)
 
@@ -99,7 +104,7 @@ class TidalService:
 
     def get_track_recommendations(self, track_id: str, limit: int = 20) -> RecommendationsResponse:
         """Get recommended tracks based on a specific track."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit = bound_limit(limit)
 
         track = session.track(track_id)
@@ -115,7 +120,7 @@ class TidalService:
         self, track_ids: list[str], limit_per_track: int = 20, remove_duplicates: bool = True
     ) -> BatchRecommendationsResponse:
         """Get recommended tracks based on multiple track IDs."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit_per_track = bound_limit(limit_per_track)
 
         def get_track_recommendations_single(track_id: str) -> list[TrackModel]:
@@ -155,7 +160,7 @@ class TidalService:
         self, title: str, track_ids: list[str], description: str = ""
     ) -> CreatePlaylistResponse:
         """Create a new TIDAL playlist with specified tracks."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
 
         playlist = session.user.create_playlist(title, description)
         playlist.add(track_ids)
@@ -179,7 +184,7 @@ class TidalService:
 
     def get_user_playlists(self) -> PlaylistsResponse:
         """Get user's playlists from TIDAL."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         playlists = session.user.playlists()
 
         playlist_list = []
@@ -202,7 +207,7 @@ class TidalService:
 
     def get_playlist_tracks(self, playlist_id: str, limit: int = 100) -> PlaylistTracksResponse:
         """Get tracks from a specific TIDAL playlist."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit = bound_limit(limit, max_n=100)
 
         playlist = session.playlist(playlist_id)
@@ -218,7 +223,7 @@ class TidalService:
 
     def delete_playlist(self, playlist_id: str) -> DeletePlaylistResponse:
         """Delete a TIDAL playlist by its ID."""
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
 
         playlist = session.playlist(playlist_id)
         if not playlist:
@@ -236,7 +241,7 @@ class TidalService:
         """Search for tracks, albums, and/or artists on TIDAL."""
         import tidalapi
 
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit = bound_limit(limit)
         types_list = [t.strip().lower() for t in search_types.split(",")]
 
@@ -278,7 +283,7 @@ class TidalService:
         """Search for tracks on TIDAL."""
         import tidalapi
 
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit = bound_limit(limit)
         results = session.search(query, models=[tidalapi.Track], limit=limit)
 
@@ -293,7 +298,7 @@ class TidalService:
         """Search for albums on TIDAL."""
         import tidalapi
 
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit = bound_limit(limit)
         results = session.search(query, models=[tidalapi.Album], limit=limit)
 
@@ -308,7 +313,7 @@ class TidalService:
         """Search for artists on TIDAL."""
         import tidalapi
 
-        session = self.session_manager.get_authenticated_session()
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
         limit = bound_limit(limit)
         results = session.search(query, models=[tidalapi.Artist], limit=limit)
 

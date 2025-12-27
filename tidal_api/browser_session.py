@@ -56,6 +56,24 @@ class BrowserSession(tidalapi.Session):
                 f"Login timed out after {timeout} seconds. Please try again."
             ) from e
 
+    def start_oauth_login(self) -> tuple[str, int, concurrent.futures.Future]:
+        """
+        Start OAuth login process and return the auth URL immediately without blocking.
+        
+        Returns:
+            Tuple of (auth_url, expires_in, future) where:
+            - auth_url: The URL the user needs to visit
+            - expires_in: Seconds until the code expires
+            - future: Future object to check login completion
+        """
+        login, future = self.login_oauth()
+        
+        auth_url = login.verification_uri_complete
+        if not auth_url.startswith("http"):
+            auth_url = "https://" + auth_url
+            
+        return auth_url, login.expires_in, future
+
     def login_session_file_auto(
         self,
         session_file: Path,
