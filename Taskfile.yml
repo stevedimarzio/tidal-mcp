@@ -1,8 +1,5 @@
 version: '3'
 
-includes:
-  deploy: .deploy.yml
-
 vars:
   HTTP_PORT: "8080"
 
@@ -78,7 +75,7 @@ tasks:
   dev:
     desc: Run MCP server in HTTP mode for local development
     cmds:
-      - uv run python start_mcp_http.py --port {{.HTTP_PORT}}
+      - uv run uvicorn app:app --host 127.0.0.1 --port {{.HTTP_PORT}}
 
   print-cursor-config:
     desc: Print copy&paste ready config for Cursor local debug
@@ -87,20 +84,7 @@ tasks:
         echo "{"
         echo '  "mcpServers": {'
         echo '    "TIDAL MCP (HTTP)": {'
-        echo '      "url": "http://127.0.0.1:{{.HTTP_PORT}}/sse",'
-        echo '      "transport": "sse"'
-        echo "    }"
-        echo "  }"
-        echo "}"
-
-  print-claude-config:
-    desc: Print copy&paste ready config for Claude Desktop local debug
-    cmds:
-      - |
-        echo "{"
-        echo '  "mcpServers": {'
-        echo '    "TIDAL MCP (HTTP)": {'
-        echo '      "url": "http://127.0.0.1:{{.HTTP_PORT}}/sse",'
+        echo '      "url": "http://127.0.0.1:{{.HTTP_PORT}}/mcp",'
         echo '      "transport": "sse"'
         echo "    }"
         echo "  }"
@@ -112,7 +96,7 @@ tasks:
       - docker buildx build --pull --load -t {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} .
 
   docker-build-cloud:
-    desc: Build Docker image for CloudRun/cloud deployment (linux/amd64)
+    desc: Build Docker image for cloud deployment (linux/amd64)
     cmds:
       - docker buildx build --platform linux/amd64 --pull --load -t {{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}} .
 
@@ -121,13 +105,3 @@ tasks:
     cmds:
       - docker compose up
 
-  docker-push:
-    desc: Build (linux/amd64) and push Docker image to GCP Artifact Registry
-    depends: docker-build-cloud
-    cmds:
-      - |
-        set -e
-        FULL_IMAGE="{{.GCP_REGISTRY_LOCATION}}-docker.pkg.dev/{{.GCP_PROJECT_ID}}/{{.GCP_REPOSITORY}}/{{.DOCKER_IMAGE_NAME}}:{{.DOCKER_IMAGE_TAG}}"
-        echo "Building for linux/amd64 platform (required for CloudRun)..."
-        docker buildx build --platform linux/amd64 --pull -t "$FULL_IMAGE" --push .
-        echo "Image pushed to: $FULL_IMAGE"

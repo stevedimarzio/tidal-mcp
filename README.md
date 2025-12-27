@@ -49,22 +49,15 @@ The LLM filters and curates results using your input, finds similar tracks via T
 
 ### Running the Server
 
-To run the MCP server directly for testing:
+To run the MCP server in HTTP mode:
 
 ```bash
-# Option 1: Using the start script (stdio mode - for Claude Desktop)
-uv run python start_mcp.py
-
-# Option 2: Using uv with mcp command directly
-uv run mcp run mcp_server/server.py
-
-# Option 3: HTTP mode (for debugging with Cursor)
-uv run python start_mcp_http.py --port 8080
+uv run uvicorn app:app --host 127.0.0.1 --port 8080
 ```
 
 **Note:** Always use `uv run` to ensure all dependencies are available in the correct environment.
 
-**HTTP Mode for Debugging:** If you want to debug the MCP server or connect it to Cursor via HTTP, use `start_mcp_http.py`. See [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md) for detailed instructions.
+The server will be available at `http://127.0.0.1:8080` (or configure with `--host` and `--port`). For production, use `--host 0.0.0.0` to accept connections from all interfaces.
 
 ### Running with Docker
 
@@ -82,8 +75,8 @@ You can also run the TIDAL MCP server using Docker, which simplifies deployment 
 docker build -t tidal-mcp:latest .
 ```
 
-**For CloudRun/cloud deployment (required for CloudRun):**
-CloudRun requires `linux/amd64` architecture. Build with the correct platform:
+**For cloud deployment (linux/amd64):**
+For cloud platforms that require `linux/amd64` architecture, build with the correct platform:
 
 ```bash
 docker buildx build --platform linux/amd64 -t tidal-mcp:latest .
@@ -94,7 +87,7 @@ Or use the task command:
 task docker-build-cloud
 ```
 
-**⚠️ Important:** If you're building on Apple Silicon (M1/M2/M3 Mac), you must specify `--platform linux/amd64` for CloudRun deployment, otherwise you'll get an "exec format error".
+**⚠️ Important:** If you're building on Apple Silicon (M1/M2/M3 Mac), you must specify `--platform linux/amd64` for cloud deployment, otherwise you'll get an "exec format error".
 
 #### Running with Docker
 
@@ -117,7 +110,7 @@ This will:
 - Start the server in HTTP mode on port 8080
 - Mount the `data/sessions` directory for session persistence
 - Run health checks using curl (as cloud services do)
-- Enable API key authentication with default dev key: `mcptest` (via `x-api-key` header)
+- Enable API key authentication with default dev key: `mcptest` (via `X-API-KEY` header)
 
 To run in detached mode:
 
@@ -133,7 +126,7 @@ docker compose down
 
 **Option 2: Using Docker directly**
 
-Run the container with HTTP mode (default):
+Run the container:
 
 ```bash
 docker run -p 8080:8080 \
@@ -141,19 +134,13 @@ docker run -p 8080:8080 \
   tidal-mcp:latest
 ```
 
-Run in stdio mode:
-
-```bash
-docker run tidal-mcp:latest python start_mcp.py
-```
-
 #### Environment Variables
 
 You can customize the server behavior using environment variables:
 
-- `PORT` or `MCP_HTTP_PORT`: Port for the MCP HTTP server (default: `8080`, CloudRun compatible)
+- `PORT`: Port for the MCP HTTP server (default: `8080`)
 - `HOST`: Host to bind to (default: `0.0.0.0` for Docker, `127.0.0.1` for local)
-- `API_KEY` or `MCP_API_KEY`: API key for authentication via `x-api-key` header (default in docker-compose: `mcptest` for development, **change in production!**)
+- `API_KEY`: API key for authentication via `X-API-KEY` header (default in docker-compose: `mcptest` for development, **change in production!**)
 
 Example with custom port:
 
@@ -175,10 +162,10 @@ The `data/sessions` directory is mounted as a volume to persist TIDAL authentica
 When running in HTTP mode, connect your MCP client to:
 
 ```
-http://localhost:8080/sse
+http://localhost:8080/mcp
 ```
 
-**Note:** The Docker Compose setup uses API key authentication by default (dev key: `mcptest`). You must include the `x-api-key` header in your requests.
+**Note:** The Docker Compose setup uses API key authentication by default (dev key: `mcptest`). You must include the `X-API-KEY` header in your requests.
 
 For Cursor configuration, use:
 
@@ -186,10 +173,10 @@ For Cursor configuration, use:
 {
   "mcpServers": {
     "TIDAL MCP (Docker)": {
-      "url": "http://localhost:8080/sse",
+      "url": "http://localhost:8080/mcp",
       "transport": "sse",
       "headers": {
-        "x-api-key": "mcptest"
+        "X-API-KEY": "mcptest"
       }
     }
   }
@@ -198,73 +185,68 @@ For Cursor configuration, use:
 
 **⚠️ Important:** The default API key `mcptest` is for **development only**. For production deployments, set a strong, unique API key via the `API_KEY` environment variable.
 
-### Cloud Deployment (CloudRun, ECS, Azure Container Apps)
+### Cloud Deployment
 
-The container is designed to work with cloud container services. Here's how to configure it:
+The container is designed to work with cloud container services. Here are deployment options:
 
-#### Google Cloud Run
+#### FastMCP Cloud (Recommended)
 
-1. **Build your Docker image for CloudRun** (must be linux/amd64):
+FastMCP Cloud provides free hosting for personal MCP servers. To deploy:
+
+1. **Install FastMCP CLI** (if not already installed):
    ```bash
-   docker buildx build --platform linux/amd64 -t gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest .
+   pip install fastmcp
    ```
 
-2. **Push to Google Container Registry or Artifact Registry**:
+2. **Login to FastMCP Cloud**:
    ```bash
-   docker push gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest
+   fastmcp cloud login
    ```
 
-3. **Deploy to CloudRun** with environment variables:
+3. **Deploy your server**:
+   ```bash
+   fastmcp cloud deploy
+   ```
 
-```bash
-gcloud run deploy tidal-mcp \
-  --image gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars API_KEY=your-production-api-key-here \
-  --port 8080
-```
+4. **Set your API key** (for authentication):
+   ```bash
+   fastmcp cloud env set API_KEY=your-production-api-key-here
+   ```
 
-Or using the Cloud Console:
-- Go to Cloud Run → Create Service
-- Set the container image
-- Under **Container, Networking, Security** → **Variables & Secrets**:
-  - Add environment variable: `API_KEY` = `your-production-api-key-here`
-  - The `PORT` variable is automatically set by CloudRun (defaults to 8080)
+5. **Get your server URL**:
+   ```bash
+   fastmcp cloud status
+   ```
 
-3. **Access your service**: CloudRun will provide a URL like `https://tidal-mcp-xxxxx.run.app`
-
-4. **Configure your MCP client** to use the CloudRun URL with the API key:
+6. **Configure your MCP client** to use the FastMCP Cloud URL:
 
 ```json
 {
   "mcpServers": {
-    "TIDAL MCP (CloudRun)": {
-      "url": "https://tidal-mcp-xxxxx.run.app/sse",
+    "TIDAL MCP (FastMCP Cloud)": {
+      "url": "https://your-server.fastmcp.cloud/mcp",
       "transport": "sse",
       "headers": {
-        "x-api-key": "your-production-api-key-here"
+        "X-API-KEY": "your-production-api-key-here"
       }
     }
   }
 }
 ```
 
-**Security Best Practices:**
-- Use Google Secret Manager for sensitive values:
-  ```bash
-  gcloud run deploy tidal-mcp \
-    --image gcr.io/YOUR_PROJECT_ID/tidal-mcp:latest \
-    --update-secrets API_KEY=api-key-secret:latest
-  ```
-- Never commit API keys to version control
-- Use different API keys for different environments (dev, staging, prod)
-- Rotate API keys regularly
+For more details, see the [FastMCP Cloud documentation](https://gofastmcp.com/).
 
-#### AWS ECS / Fargate
+#### Generic Cloud Container Services
 
-Set the `API_KEY` environment variable in your task definition:
+The container can be deployed to any cloud container service (AWS ECS, Azure Container Apps, etc.):
+
+**Key Configuration:**
+- Set `API_KEY` environment variable for authentication
+- Set `PORT=8080` (or let the service auto-detect)
+- Expose port 8080
+- The `/health` endpoint bypasses API key authentication for health checks
+
+**Example for AWS ECS / Fargate:**
 
 ```json
 {
@@ -288,9 +270,7 @@ Set the `API_KEY` environment variable in your task definition:
 }
 ```
 
-#### Azure Container Apps
-
-Set environment variables in your Container App configuration:
+**Example for Azure Container Apps:**
 
 ```bash
 az containerapp create \
@@ -301,109 +281,13 @@ az containerapp create \
   --env-vars API_KEY=your-production-api-key-here PORT=8080
 ```
 
-**Note:** The `/health` endpoint bypasses API key authentication, which is required for cloud health checks to work properly.
+**Security Best Practices:**
+- Never commit API keys to version control
+- Use different API keys for different environments (dev, staging, prod)
+- Rotate API keys regularly
+- Use your cloud provider's secret management service for sensitive values
 
 ## MCP Client Configuration
-
-### Claude Desktop Configuration
-
-To integrate TIDAL MCP with Claude Desktop, you need to add the server configuration to Claude's MCP settings.
-
-#### Step 1: Find Your Paths
-
-Before configuring, you'll need to know:
-
-1. **Path to `uv` executable**: 
-   - macOS (Homebrew): Usually `/opt/homebrew/bin/uv` or `/usr/local/bin/uv`
-   - Linux: Usually `~/.local/bin/uv` or `/usr/local/bin/uv`
-   - Find it by running: `which uv` in your terminal
-
-2. **Path to your project**: 
-   - The full path to where you cloned this repository
-   - Example: `/Users/yourname/projects/tidal-mcp`
-
-#### Step 2: Locate Claude Desktop Config File
-
-The configuration file location depends on your operating system:
-
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-#### Step 3: Edit the Configuration
-
-1. Open Claude Desktop
-2. Go to **Settings** → **Developer**
-3. Click **"Edit Config"** (this opens the config file in your default editor)
-4. Add or update the `mcpServers` section with the following configuration:
-
-```json
-{
-  "mcpServers": {
-    "TIDAL Integration": {
-      "command": "/opt/homebrew/bin/uv",
-      "env": {},
-      "args": [
-        "run",
-        "--with",
-        "requests",
-        "--with",
-        "mcp[cli]",
-        "--with",
-        "fastapi",
-        "--with",
-        "uvicorn",
-        "--with",
-        "tidalapi",
-        "mcp",
-        "run",
-        "/path/to/your/tidal-mcp/mcp_server/server.py"
-      ]
-    }
-  }
-}
-```
-
-**Important**: Replace the following in the configuration:
-- `/opt/homebrew/bin/uv` → Your actual `uv` path (from Step 1)
-- `/path/to/your/tidal-mcp/mcp_server/server.py` → Your actual project path (from Step 1)
-
-#### Step 4: Save and Restart
-
-1. Save the configuration file
-2. Restart Claude Desktop completely (quit and reopen)
-3. The TIDAL Integration should now appear in Claude's MCP tools
-
-#### Alternative Configuration (Using start_mcp.py)
-
-If you prefer to use the start script directly, you can use this alternative configuration:
-
-```json
-{
-  "mcpServers": {
-    "TIDAL Integration": {
-      "command": "/opt/homebrew/bin/uv",
-      "env": {},
-      "args": [
-        "run",
-        "python",
-        "/path/to/your/tidal-mcp/start_mcp.py"
-      ]
-    }
-  }
-}
-```
-
-#### Verification
-
-After restarting Claude Desktop:
-
-1. Start a new conversation
-2. Look for the TIDAL Integration tools in Claude's available tools
-3. Try asking: *"Can you help me log in to TIDAL?"*
-
-Example screenshot of the MCP configuration in Claude Desktop:
-![Claude MCP Configuration](./assets/claude_desktop_config.png)
 
 ### Cursor Configuration (HTTP Mode for Debugging)
 
@@ -413,7 +297,7 @@ To use the MCP server with Cursor in HTTP mode for debugging:
    
    **Option A: Local development (no API key required):**
    ```bash
-   uv run python start_mcp_http.py --port 8080
+   uv run uvicorn app:app --host 127.0.0.1 --port 8080
    ```
    
    **Option B: With Docker (API key required):**
@@ -433,7 +317,7 @@ To use the MCP server with Cursor in HTTP mode for debugging:
    {
      "mcpServers": {
        "TIDAL MCP (HTTP)": {
-         "url": "http://127.0.0.1:8080/sse",
+         "url": "http://127.0.0.1:8080/mcp",
          "transport": "sse"
        }
      }
@@ -444,11 +328,11 @@ To use the MCP server with Cursor in HTTP mode for debugging:
    ```json
    {
      "mcpServers": {
-       "TIDAL MCP (HTTP)": {
-         "url": "http://127.0.0.1:8080/sse",
-         "transport": "sse",
-         "headers": {
-           "x-api-key": "mcptest"
+      "TIDAL MCP (HTTP)": {
+        "url": "http://127.0.0.1:8080/mcp",
+        "transport": "sse",
+        "headers": {
+          "X-API-KEY": "mcptest"
          }
        }
      }
@@ -461,24 +345,138 @@ To use the MCP server with Cursor in HTTP mode for debugging:
 
 For detailed instructions and troubleshooting, see the [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md).
 
+### Mistral Configuration (Remote Server via Connectors)
+
+To integrate a remote `tidal-mcp` server with Mistral AI using connectors, follow these steps:
+
+#### Prerequisites
+
+1. **Deploy your TIDAL MCP server** to a publicly accessible URL (e.g., FastMCP Cloud, ECS, Azure Container Apps, or any HTTPS endpoint)
+2. **Note your server URL** - it should be in the format: `https://your-domain.com/mcp` or `https://your-server.fastmcp.cloud/mcp`
+3. **Have your API key ready** - the API key you configured when deploying the server (via `API_KEY` environment variable)
+
+#### Step 1: Access Connectors in Mistral
+
+1. Open Mistral AI (le Chat)
+2. Click the **toggle panel button** (☰) to reveal the side panel
+3. Expand the **Intelligence** menu
+4. Select **Connectors**
+
+#### Step 2: Add Custom MCP Connector
+
+1. Click the **+ Add Connector** button
+2. Switch to the **Custom MCP Connector** tab
+
+#### Step 3: Configure the Connector
+
+Fill in the connector configuration with the following details:
+
+- **Connector Name**: `TIDAL MCP` (or any name you prefer)
+- **Connection Server**: Enter your full server URL with the `/mcp` endpoint:
+  ```
+  https://your-domain.com/mcp
+  ```
+  Or for FastMCP Cloud:
+  ```
+  https://your-server.fastmcp.cloud/mcp
+  ```
+- **Description** (optional): `TIDAL music integration for recommendations, playlists, and search`
+- **Authentication Method**: Select **API Key** or **Custom Header** (depending on Mistral's options)
+- **API Key Header**: `X-API-KEY`
+- **API Key Value**: Your production API key (the one you set via `API_KEY` environment variable)
+
+**Example Configuration:**
+
+If Mistral uses a JSON configuration format, use:
+
+```json
+{
+  "name": "TIDAL MCP",
+  "url": "https://your-server.fastmcp.cloud/mcp",
+  "transport": "sse",
+  "headers": {
+    "X-API-KEY": "your-production-api-key-here"
+  }
+}
+```
+
+#### Step 4: Connect and Verify
+
+1. Click the **Connect** button
+2. Wait for Mistral to establish the connection
+3. Verify the connection status shows as **Connected** or **Active**
+
+#### Step 5: Use the Connector in Conversations
+
+1. Start a new conversation in Mistral
+2. Click the **Tools** button below the input box
+3. Under the **Connectors** section, ensure **TIDAL MCP** is selected/enabled
+4. You can now ask questions like:
+   - *"Help me log in to TIDAL"*
+   - *"Show me my favorite tracks"*
+   - *"Recommend songs similar to my favorites"*
+
 #### Troubleshooting
 
-**Server won't start:**
-- Verify the `uv` path is correct: run `which uv` in terminal
-- Verify the project path is correct and points to `mcp_server/server.py`
-- Check that all dependencies are installed: `uv pip install --editable .`
+**Connection fails:**
+- Verify your server URL is correct and includes `/mcp` endpoint
+- Ensure your server is publicly accessible (not behind a firewall)
+- Check that your API key matches the one configured on the server
+- Verify the server is running and responding to health checks: `curl https://your-domain.com/health`
 
-**Port already in use:**
-- Change `PORT` or `MCP_HTTP_PORT` to a different port (e.g., "9000")
-- Make sure no other instance of the server is running
+**"Request validation failed" error:**
+- This error typically occurs when uvicorn's proxy headers middleware isn't configured to trust the proxy
+- The Docker image is configured with `--forwarded-allow-ips='*'` by default to handle proxy headers
+- If you're still experiencing this error, ensure you're using the latest Docker image version
+- You can override the forwarded IPs configuration via the `FORWARDED_ALLOW_IPS` environment variable if needed
 
-**Import errors:**
-- Make sure you've installed dependencies: `uv pip install --editable .`
-- Verify you're using the correct Python version (3.10+)
+**Authentication errors:**
+- Double-check the API key header name is exactly `X-API-KEY` (case-insensitive, but use uppercase for consistency)
+- Verify the API key value matches your server's `API_KEY` environment variable
+- Ensure your server has API key authentication enabled (set `API_KEY` environment variable)
+
+**Tools not appearing:**
+- Make sure the connector is enabled in the Tools menu for your conversation
+- Try disconnecting and reconnecting the connector
+- Check Mistral's connector logs for any error messages
+
+**Server not responding:**
+- Verify your server is deployed and running
+- Check cloud service logs for errors
+- Test the `/health` endpoint directly: `curl https://your-domain.com/health`
+- Ensure your server supports SSE (Server-Sent Events) transport
+
+#### Security Best Practices
+
+- **Use HTTPS**: Always use HTTPS URLs for remote connections (never HTTP)
+- **Strong API Keys**: Use a strong, unique API key for production (not the default `mcptest`)
+- **Rotate Keys**: Regularly rotate your API keys for security
+- **Monitor Access**: Review your server logs to monitor connector usage
+- **Restrict Access**: Consider IP whitelisting if your cloud provider supports it
+
+#### Example: FastMCP Cloud Deployment for Mistral
+
+If deploying to FastMCP Cloud for Mistral:
+
+```bash
+# Deploy with FastMCP Cloud
+fastmcp cloud deploy
+
+# Set your production API key
+fastmcp cloud env set API_KEY=your-secure-production-key-here
+
+# Get your server URL
+fastmcp cloud status
+```
+
+Then use the FastMCP Cloud URL in Mistral:
+```
+https://your-server.fastmcp.cloud/mcp
+```
 
 ## Usage Examples
 
-Once configured, you can interact with your TIDAL account through Claude by asking questions like:
+Once configured, you can interact with your TIDAL account by asking questions like:
 
 ### Getting Started
 - *"Help me log in to TIDAL"*

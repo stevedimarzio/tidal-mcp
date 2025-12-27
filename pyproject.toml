@@ -5,8 +5,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "certifi>=2024.0.0",
-    "fastapi>=0.115.0",
-    "mcp[cli]>=1.6.0",
+    "fastmcp>=2.0.0,<3.0.0",
     "pydantic>=2.0.0",
     "requests>=2.32.3",
     "tidalapi>=0.8.8",

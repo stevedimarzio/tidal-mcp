@@ -5,16 +5,15 @@ services:
       dockerfile: Dockerfile
     image: tidal-mcp:latest
     container_name: tidal-mcp
-    command: ["python", "start_mcp_http.py", "--host", "0.0.0.0"]
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "8080:8080"
     volumes:
       - ./data/sessions:/app/data/sessions
     environment:
       - PORT=8080
-      - MCP_HTTP_PORT=8080
       - HOST=0.0.0.0
-      # API_KEY: API key for authentication via x-api-key header
+      # API_KEY: API key for authentication via X-API-KEY header
       # Default: "mcptest" (for development only - change in production!)
       - API_KEY=mcptest
     restart: unless-stopped

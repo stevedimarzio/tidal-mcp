@@ -15,3 +15,5 @@ play.ipynb
 
 # Deployment configuration
 .deploy.yml
+.cursor
+.docs

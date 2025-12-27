@@ -1,20 +1,17 @@
-import sys
-from pathlib import Path
+from fastmcp import FastMCP
+from starlette.responses import JSONResponse
 
-from mcp.server.fastmcp import FastMCP
-
-try:
-    from .container import container
-    from .logger import logger
-except ImportError:
-    parent_dir = Path(__file__).parent.parent
-    if str(parent_dir) not in sys.path:
-        sys.path.insert(0, str(parent_dir))
-    from mcp_server.container import container
-    from mcp_server.logger import logger
+from mcp_server.logger import logger
+from mcp_server.wireup_config import container
 
 mcp = FastMCP("TIDAL MCP")
 logger.info("TIDAL MCP server initialized")
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request):
+    """Health check endpoint for monitoring and load balancers."""
+    return JSONResponse({"status": "healthy", "service": "tidal-mcp"})
 
 
 @mcp.tool()

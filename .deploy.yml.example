@@ -1,9 +1,0 @@
-version: '3'
-
-vars:
-  GCP_PROJECT_ID: your-project-id
-  GCP_REGISTRY_LOCATION: us-central1
-  GCP_REPOSITORY: tidal-mcp
-  DOCKER_IMAGE_NAME: tidal-mcp
-  DOCKER_IMAGE_TAG: latest
-

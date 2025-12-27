@@ -22,7 +22,7 @@ RUN uv pip install --system --no-cache .
 # Stage 2: Runtime stage
 FROM python:3.11-slim
 
-# Install curl for health checks (used by cloud container services)
+# Install curl for health checks
 RUN apt-get update && apt-get install -y --no-install-recommends curl && \
     rm -rf /var/lib/apt/lists/*
 
@@ -39,7 +39,7 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY mcp_server/ ./mcp_server/
 COPY tidal_api/ ./tidal_api/
-COPY start_mcp.py start_mcp_http.py ./
+COPY app.py ./
 
 # Install dependencies using uv (as root, then switch to appuser)
 RUN uv pip install --system --no-cache .
@@ -51,19 +51,20 @@ RUN mkdir -p /app/data/sessions && \
 # Switch to non-root user
 USER appuser
 
-# Expose ports
-# 8080: MCP HTTP server (SSE transport)
+# Expose port
 EXPOSE 8080
 
 # Set environment variables with defaults
-# PORT is used by CloudRun and other cloud services
 ENV PORT=8080
-ENV MCP_HTTP_PORT=8080
 ENV HOST=0.0.0.0
-# API_KEY or MCP_API_KEY: Optional API key for authentication via x-api-key header
-# If set, all requests (except /health) must include x-api-key header with matching value
+# FORWARDED_ALLOW_IPS: Comma-separated list of IPs/networks to trust for forwarded headers
+# Use '*' for proxy environments (default: '*' for cloud compatibility)
+ENV FORWARDED_ALLOW_IPS=*
+# API_KEY: API key for authentication via X-API-KEY header
+# If set, all requests (except /health) must include X-API-KEY header with matching value
 # Example: ENV API_KEY=your-secret-api-key-here
 
-# Default command: run MCP server in HTTP mode
-CMD ["python", "start_mcp_http.py", "--host", "0.0.0.0"]
+# Default command: run MCP server in HTTP mode using uvicorn
+# --forwarded-allow-ips allows uvicorn to trust forwarded headers from proxies
+CMD uvicorn app:app --host ${HOST:-0.0.0.0} --port ${PORT:-8080} --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-*}
 
