@@ -2,7 +2,6 @@ from fastmcp import FastMCP
 from starlette.responses import JSONResponse
 from starlette.requests import Request
 import uuid
-import os
 
 from mcp_server.logger import logger
 from mcp_server.wireup_config import container
@@ -23,27 +22,14 @@ async def http_login(request: Request):
     HTTP endpoint to start TIDAL authentication.
     Returns auth URL immediately for cloud deployment.
     Sets a session cookie for tracking.
-    
-    Accepts optional 'callback_url' in JSON body for redirect after login.
     """
     try:
-        # Get callback URL from request body if provided
-        callback_url = None
-        try:
-            body = await request.json()
-            callback_url = body.get("callback_url")
-        except Exception:
-            pass
-        
         # Get or create session ID from cookie
         session_id = request.cookies.get("tidal_session_id")
         if not session_id:
             session_id = str(uuid.uuid4())
         
-        result = container.session_manager.authenticate(
-            session_id=session_id,
-            callback_url=callback_url
-        )
+        result = container.session_manager.authenticate(session_id=session_id)
         
         # Set session ID in service
         if "session_id" in result:
@@ -51,15 +37,13 @@ async def http_login(request: Request):
         
         response = JSONResponse(result)
         # Set session cookie (30 days expiry)
-        # Cookie security: use HTTPS in production
-        is_https = os.getenv("HTTPS_ENABLED", "false").lower() == "true"
         response.set_cookie(
             key="tidal_session_id",
             value=result.get("session_id", session_id),
             max_age=30 * 24 * 60 * 60,  # 30 days
             httponly=True,
             samesite="lax",
-            secure=is_https,  # Set HTTPS_ENABLED=true in production
+            secure=False,  # Set to True in production with HTTPS
         )
         return response
     except Exception as e:
@@ -75,7 +59,6 @@ async def http_status_check(request: Request):
     """
     HTTP endpoint to check authentication status.
     Uses session ID from cookie or query parameter.
-    Returns callback_url if authentication completed and callback was set.
     """
     try:
         # Get session ID from cookie or query parameter
@@ -102,53 +85,8 @@ async def http_status_check(request: Request):
         )
 
 
-@mcp.custom_route("/auth/callback", methods=["GET"])
-async def auth_callback(request: Request):
-    """
-    Callback endpoint for redirect after authentication.
-    Redirects to the callback URL if authentication is complete.
-    """
-    from starlette.responses import RedirectResponse
-    
-    try:
-        session_id = request.query_params.get("session_id")
-        if not session_id:
-            return JSONResponse(
-                {"status": "error", "message": "No session ID provided"},
-                status_code=400
-            )
-        
-        # Check authentication status
-        result = container.session_manager.check_login_status(session_id)
-        
-        if result.get("authenticated"):
-            callback_url = result.get("callback_url")
-            if callback_url:
-                # Redirect to callback URL
-                logger.info(f"Redirecting session {session_id} to callback URL")
-                return RedirectResponse(url=callback_url, status_code=302)
-            else:
-                return JSONResponse({
-                    "status": "success",
-                    "message": "Authentication successful",
-                    "session_id": session_id,
-                })
-        else:
-            return JSONResponse({
-                "status": result.get("status", "pending"),
-                "message": result.get("message", "Authentication not yet complete"),
-                "session_id": session_id,
-            }, status_code=202)  # Accepted but not complete
-    except Exception as e:
-        logger.error(f"Callback error: {e}", exc_info=True)
-        return JSONResponse(
-            {"status": "error", "message": f"Callback failed: {str(e)}"},
-            status_code=500
-        )
-
-
 @mcp.tool()
-def tidal_login(session_id: str | None = None, callback_url: str | None = None) -> dict:
+def tidal_login(session_id: str | None = None) -> dict:
     """
     Authenticate with TIDAL through browser login flow.
     Returns the authentication URL immediately for cloud deployment compatibility.
@@ -156,9 +94,6 @@ def tidal_login(session_id: str | None = None, callback_url: str | None = None) 
 
     Args:
         session_id: Optional session ID. If not provided, a new one will be generated.
-        callback_url: Optional callback URL for automatic redirect after login.
-                     The user will be redirected to this URL once authentication completes.
-                     Use this to redirect back to the chat interface.
 
     Returns:
         Dictionary containing:
@@ -166,13 +101,9 @@ def tidal_login(session_id: str | None = None, callback_url: str | None = None) 
         - auth_url: URL to visit for authentication (if status is "pending")
         - session_id: Session ID to use for checking status and subsequent requests
         - expires_in: Seconds until the auth code expires
-        - callback_url: Echo of the callback URL if provided
     """
     try:
-        result = container.session_manager.authenticate(
-            session_id=session_id,
-            callback_url=callback_url
-        )
+        result = container.session_manager.authenticate(session_id=session_id)
         # Set session ID in service for subsequent calls
         if "session_id" in result:
             container.tidal_service.set_session_id(result["session_id"])
