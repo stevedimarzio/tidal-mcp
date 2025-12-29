@@ -43,9 +43,8 @@ COPY tidal_api/ ./tidal_api/
 # Install dependencies using uv (as root, then switch to appuser)
 RUN uv pip install --system --no-cache .
 
-# Create data directory for sessions and set ownership
-RUN mkdir -p /app/data/sessions && \
-    chown -R appuser:appuser /app
+# Set ownership for app directory
+RUN chown -R appuser:appuser /app
 
 # Switch to non-root user
 USER appuser

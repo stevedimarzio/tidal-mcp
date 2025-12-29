@@ -1,7 +1,8 @@
-from fastmcp import FastMCP
-from starlette.responses import JSONResponse
-from starlette.requests import Request
 import uuid
+
+from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from mcp_server.logger import logger
 from mcp_server.wireup_config import container
@@ -21,31 +22,22 @@ async def http_login(request: Request):
     """
     HTTP endpoint to start TIDAL authentication.
     Returns auth URL immediately for cloud deployment.
-    Sets a session cookie for tracking.
+    Accepts session_id in JSON request body. If not provided, generates a new one.
     """
     try:
-        # Get or create session ID from cookie
-        session_id = request.cookies.get("tidal_session_id")
+        # Get session_id from request JSON body
+        body = await request.json()
+        session_id = body.get("session_id")
         if not session_id:
             session_id = str(uuid.uuid4())
-        
+
         result = container.session_manager.authenticate(session_id=session_id)
-        
+
         # Set session ID in service
         if "session_id" in result:
             container.tidal_service.set_session_id(result["session_id"])
-        
-        response = JSONResponse(result)
-        # Set session cookie (30 days expiry)
-        response.set_cookie(
-            key="tidal_session_id",
-            value=result.get("session_id", session_id),
-            max_age=30 * 24 * 60 * 60,  # 30 days
-            httponly=True,
-            samesite="lax",
-            secure=False,  # Set to True in production with HTTPS
-        )
-        return response
+
+        return JSONResponse(result)
     except Exception as e:
         logger.error(f"Login error: {e}", exc_info=True)
         return JSONResponse(
@@ -58,24 +50,24 @@ async def http_login(request: Request):
 async def http_status_check(request: Request):
     """
     HTTP endpoint to check authentication status.
-    Uses session ID from cookie or query parameter.
+    Requires session_id query parameter.
     """
     try:
-        # Get session ID from cookie or query parameter
-        session_id = request.cookies.get("tidal_session_id") or request.query_params.get("session_id")
-        
+        # Get session ID from query parameter
+        session_id = request.query_params.get("session_id")
+
         if not session_id:
             return JSONResponse(
-                {"status": "error", "message": "No session ID provided"},
+                {"status": "error", "message": "No session ID provided. Use ?session_id=<your_session_id>"},
                 status_code=400
             )
-        
+
         result = container.session_manager.check_login_status(session_id)
-        
+
         # Set session ID in service if authenticated
         if result.get("authenticated"):
             container.tidal_service.set_session_id(session_id)
-        
+
         return JSONResponse(result)
     except Exception as e:
         logger.error(f"Status check error: {e}", exc_info=True)
@@ -92,8 +84,15 @@ def tidal_login(session_id: str | None = None) -> dict:
     Returns the authentication URL immediately for cloud deployment compatibility.
     Use check_login_status() to check if authentication completed.
 
+    IMPORTANT FOR AI ASSISTANTS: After calling this function, remember the returned
+    session_id and include it in all subsequent TIDAL tool calls. Sessions persist
+    across conversations, so users only need to authenticate once per session_id.
+
     Args:
-        session_id: Optional session ID. If not provided, a new one will be generated.
+        session_id: Optional session ID. If not provided:
+                   - Checks TIDAL_USER_ID environment variable (for multi-user deployments)
+                   - Otherwise generates a new UUID
+                   Each session_id corresponds to one TIDAL account login.
 
     Returns:
         Dictionary containing:
@@ -134,6 +133,68 @@ def check_login_status(session_id: str) -> dict:
 
 
 @mcp.tool()
+def list_tidal_sessions() -> dict:
+    """
+    List all available TIDAL sessions.
+
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "What sessions do I have?"
+    - "List my TIDAL sessions"
+    - "Show me all my logins"
+    - "What session IDs are available?"
+    - Any request to see available sessions or discover session_id
+
+    This function lists all sessions stored in DiskStore, helping users
+    discover their session_id if they've forgotten it.
+
+    Returns:
+        A dictionary containing a list of all available sessions with their status
+    """
+    try:
+        sessions = container.session_manager.list_active_sessions()
+        return {
+            "status": "success",
+            "sessions": sessions,
+            "total_sessions": len(sessions),
+            "authenticated_sessions": sum(1 for s in sessions if s.get("authenticated", False)),
+        }
+    except Exception as e:
+        logger.error(f"Error listing sessions: {e}", exc_info=True)
+        return {"status": "error", "message": f"Failed to list sessions: {str(e)}"}
+
+
+@mcp.tool()
+def get_tidal_session_info(session_id: str) -> dict:
+    """
+    Get detailed information about a specific TIDAL session.
+
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "What's the status of my session?"
+    - "Tell me about session X"
+    - "Check if my session is valid"
+    - Any request to get details about a specific session_id
+
+    This function provides detailed information about a specific session including
+    authentication status and user information.
+
+    Args:
+        session_id: The session ID to get information for
+
+    Returns:
+        A dictionary containing detailed session information
+    """
+    try:
+        info = container.session_manager.get_session_info(session_id)
+        return {
+            "status": "success",
+            "session_info": info,
+        }
+    except Exception as e:
+        logger.error(f"Error getting session info: {e}", exc_info=True)
+        return {"status": "error", "message": f"Failed to get session info: {str(e)}"}
+
+
+@mcp.tool()
 def get_favorite_tracks(limit: int = 20, session_id: str | None = None) -> dict:
     """
     Retrieves tracks from the user's TIDAL account favorites.
@@ -149,7 +210,8 @@ def get_favorite_tracks(limit: int = 20, session_id: str | None = None) -> dict:
 
     Args:
         limit: Maximum number of tracks to retrieve (default: 20, note it should be large enough by default unless specified otherwise).
-        session_id: Optional session ID. If not provided, uses the default session.
+        session_id: Optional session ID. If not provided, checks TIDAL_USER_ID environment variable.
+                   After calling tidal_login(), remember the returned session_id and pass it here.
 
     Returns:
         A dictionary containing track information including track ID, title, artist, album, and duration.
@@ -159,13 +221,19 @@ def get_favorite_tracks(limit: int = 20, session_id: str | None = None) -> dict:
         # Set session ID if provided
         if session_id:
             container.tidal_service.set_session_id(session_id)
-        
+
         auth_status = container.session_manager.check_authentication_status(session_id)
         if not auth_status.get("authenticated", False):
-            return {
-                "status": "error",
-                "message": "You need to login to TIDAL first. Please use the tidal_login() function.",
-            }
+            if session_id:
+                return {
+                    "status": "error",
+                    "message": f"Session {session_id} is not authenticated. Please use tidal_login(session_id='{session_id}') to authenticate, or use list_tidal_sessions() to see available sessions.",
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "You need to login to TIDAL first. Please use tidal_login() to start authentication. After authentication, remember the returned session_id and include it in subsequent tool calls.",
+                }
 
         response = container.tidal_service.get_favorite_tracks(limit=limit)
         return {"tracks": [track.model_dump() for track in response.tracks]}
@@ -202,7 +270,7 @@ def _get_tidal_recommendations(
     """
     try:
         _get_session_id_for_tool(session_id)
-        
+
         if not track_ids or not isinstance(track_ids, list) or len(track_ids) == 0:
             return {"status": "error", "message": "No track IDs provided for recommendations."}
 
@@ -388,10 +456,16 @@ def create_tidal_playlist(title: str, track_ids: list, description: str = "", se
         _get_session_id_for_tool(session_id)
         auth_status = container.session_manager.check_authentication_status(session_id)
         if not auth_status.get("authenticated", False):
-            return {
-                "status": "error",
-                "message": "You need to login to TIDAL first. Please use the tidal_login() function.",
-            }
+            if session_id:
+                return {
+                    "status": "error",
+                    "message": f"Session {session_id} is not authenticated. Please use tidal_login(session_id='{session_id}') to authenticate, or use list_tidal_sessions() to see available sessions.",
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": "You need to login to TIDAL first. Please use tidal_login() to start authentication. After authentication, remember the returned session_id and include it in subsequent tool calls.",
+                }
 
         if not title:
             return {"status": "error", "message": "Playlist title cannot be empty."}

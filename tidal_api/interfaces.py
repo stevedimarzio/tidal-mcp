@@ -1,6 +1,5 @@
 """Interfaces and protocols for dependency injection."""
 
-from pathlib import Path
 from typing import Protocol
 
 try:
@@ -22,8 +21,4 @@ class ISessionManager(Protocol):
 
     def check_authentication_status(self) -> dict:
         """Check if there's an active authenticated session."""
-        ...
-
-    def get_session_file_path(self) -> Path:
-        """Get the path to the TIDAL session file."""
         ...

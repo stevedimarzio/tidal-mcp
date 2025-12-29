@@ -19,5 +19,5 @@ except (ImportError, ValueError):
         sys.path.insert(0, str(parent_dir))
     from mcp_server.logger import logger
 
-# Re-export for backward compatibility
+# Re-export logger for use in tidal_api module
 __all__ = ["logger"]

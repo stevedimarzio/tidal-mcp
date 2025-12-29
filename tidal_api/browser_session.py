@@ -59,7 +59,7 @@ class BrowserSession(tidalapi.Session):
     def start_oauth_login(self) -> tuple[str, int, concurrent.futures.Future]:
         """
         Start OAuth login process and return the auth URL immediately without blocking.
-        
+
         Returns:
             Tuple of (auth_url, expires_in, future) where:
             - auth_url: The URL the user needs to visit
@@ -67,11 +67,11 @@ class BrowserSession(tidalapi.Session):
             - future: Future object to check login completion
         """
         login, future = self.login_oauth()
-        
+
         auth_url = login.verification_uri_complete
         if not auth_url.startswith("http"):
             auth_url = "https://" + auth_url
-            
+
         return auth_url, login.expires_in, future
 
     def login_session_file_auto(
@@ -121,4 +121,50 @@ class BrowserSession(tidalapi.Session):
             return True
         else:
             fn_print("TIDAL Login KO")
+            return False
+
+    def get_session_data(self) -> dict:
+        """
+        Extract session token data from BrowserSession.
+
+        Returns:
+            Dictionary with session token data ready for storage
+
+        Raises:
+            RuntimeError: If session is not authenticated
+        """
+        if not self.check_login():
+            raise RuntimeError("Session is not authenticated")
+
+        return {
+            "token_type": self.token_type,
+            "access_token": self.access_token,
+            "refresh_token": self.refresh_token,
+            "session_id": self.session_id,
+            "is_pkce": self.is_pkce,
+        }
+
+    def load_from_data(self, data: dict) -> bool:
+        """
+        Load session from dictionary data.
+
+        Args:
+            data: Dictionary with session token data
+
+        Returns:
+            True if load was successful
+        """
+        try:
+            return self.load_oauth_session(
+                token_type=data.get("token_type", ""),
+                access_token=data.get("access_token", ""),
+                refresh_token=data.get("refresh_token"),
+                is_pkce=data.get("is_pkce", False),
+            )
+        except Exception as e:
+            try:
+                from .logger import logger
+            except ImportError:
+                from logger import logger
+            logger.error(f"Failed to load session from data: {e}")
             return False

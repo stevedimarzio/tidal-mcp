@@ -9,7 +9,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data/sessions:/app/data/sessions
+      - tidal-mcp-sessions:/home/appuser/.tidal-mcp/sessions
     environment:
       - PORT=8080
       - HOST=0.0.0.0
@@ -20,4 +20,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+volumes:
+  tidal-mcp-sessions:
 

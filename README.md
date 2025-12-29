@@ -114,7 +114,7 @@ task docker-dev
 This will:
 - Build the image if it doesn't exist
 - Start the server in HTTP mode on port 8080
-- Mount the `data/sessions` directory for session persistence
+- Mount the sessions directory for session persistence (stored in `~/.tidal-mcp/sessions`)
 - Run health checks using curl (as cloud services do)
 
 To run in detached mode:
@@ -135,7 +135,7 @@ Run the container:
 
 ```bash
 docker run -p 8080:8080 \
-  -v $(pwd)/data/sessions:/app/data/sessions \
+  -v tidal-mcp-sessions:/home/appuser/.tidal-mcp/sessions \
   tidal-mcp:latest
 ```
 
@@ -152,7 +152,7 @@ Example with custom port:
 docker run -p 9000:9000 \
   -e PORT=9000 \
   -e HOST=0.0.0.0 \
-  -v $(pwd)/data/sessions:/app/data/sessions \
+  -v tidal-mcp-sessions:/home/appuser/.tidal-mcp/sessions \
   tidal-mcp:latest
 ```
 
@@ -160,7 +160,7 @@ Or with docker-compose, modify the `environment` section in `docker-compose.yml`
 
 #### Volume Mounts
 
-The `data/sessions` directory is mounted as a volume to persist TIDAL authentication sessions across container restarts. This ensures you don't need to re-authenticate every time the container is restarted.
+Sessions are stored in `~/.tidal-mcp/sessions` (or `/home/appuser/.tidal-mcp/sessions` in Docker containers). The sessions directory is mounted as a volume to persist TIDAL authentication sessions across container restarts. This ensures you don't need to re-authenticate every time the container is restarted.
 
 #### Connecting to the Docker Container
 
@@ -464,8 +464,10 @@ Once configured, you can interact with your TIDAL account by asking questions li
 The TIDAL MCP integration provides the following tools:
 
 ### Authentication
-- **`tidal_login(session_id: str | None = None)`**: Start TIDAL authentication flow. Returns the authentication URL immediately (non-blocking) for cloud deployment compatibility. Returns a `session_id` that should be used for subsequent requests. For HTTP endpoints, use `POST /auth/login` which sets a session cookie automatically.
-- **`check_login_status(session_id: str)`**: Check if authentication has completed. Use this after calling `tidal_login()` to poll for completion. For HTTP endpoints, use `GET /auth/status` which reads the session cookie automatically.
+- **`tidal_login(session_id: str | None = None)`**: Start TIDAL authentication flow. Returns the authentication URL immediately (non-blocking) for cloud deployment compatibility. Returns a `session_id` that should be remembered and used for subsequent requests. If `session_id` is not provided, checks `TIDAL_USER_ID` environment variable, otherwise generates a new UUID.
+- **`check_login_status(session_id: str)`**: Check if authentication has completed. Use this after calling `tidal_login()` to poll for completion.
+- **`list_tidal_sessions()`**: List all available sessions. Helps discover session_id if forgotten.
+- **`get_tidal_session_info(session_id: str)`**: Get detailed information about a specific session including authentication status and user details.
 
 ### Favorites & Recommendations
 - **`get_favorite_tracks(limit: int = 20)`**: Retrieve your favorite tracks from your TIDAL account. Returns track information including ID, title, artist, album, duration, and TIDAL URLs.
@@ -487,7 +489,44 @@ The TIDAL MCP integration provides the following tools:
 - **`search_tidal_albums(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for albums. Returns matching albums with artist, release date, track count, and TIDAL URLs.
 - **`search_tidal_artists(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for artists. Returns matching artists with TIDAL URLs.
 
-**Note:** All tools accept an optional `session_id` parameter. If not provided, the default session or session from HTTP cookies will be used. For cloud deployments, it's recommended to use the session_id returned from `tidal_login()`.
+## Multi-User Session Management
+
+The TIDAL MCP server supports multiple concurrent users, each with their own session. Here's how it works:
+
+### Session Workflow for Chat Applications
+
+1. **First Authentication:**
+   - User calls `tidal_login()` (optionally with a `session_id`)
+   - Returns `auth_url` and `session_id`
+   - **Important:** The AI assistant should remember the `session_id` in conversation context
+   - User visits `auth_url` to complete TIDAL authentication
+
+2. **Subsequent Requests:**
+   - All TIDAL tools accept an optional `session_id` parameter
+   - AI assistant includes the remembered `session_id` in all tool calls
+   - Sessions persist across conversations - users only authenticate once per `session_id`
+
+3. **Multiple Users:**
+   - Each user gets their own `session_id` from `tidal_login()`
+   - Sessions are stored in DiskStore at `~/.tidal-mcp/sessions` (encrypted)
+   - Use `list_tidal_sessions()` to see all available sessions
+   - Use `get_tidal_session_info(session_id)` to check a specific session
+
+### Environment Variable Support
+
+For containerized deployments, you can set `TIDAL_USER_ID` environment variable:
+- When `session_id` is not provided, the system checks `TIDAL_USER_ID`
+- If set, uses `TIDAL_USER_ID` as the default session_id
+- Allows per-user default sessions in multi-user deployments
+- Explicit `session_id` parameter always takes precedence
+
+### HTTP Endpoints
+
+HTTP endpoints (`POST /auth/login` and `GET /auth/status`) accept `session_id`:
+- **POST /auth/login**: Send `{"session_id": "..."}` in JSON body (optional, generates new if not provided)
+- **GET /auth/status**: Use `?session_id=...` query parameter (required)
+
+**Note:** All tools accept an optional `session_id` parameter. If not provided, checks `TIDAL_USER_ID` environment variable. For chat applications, it's recommended to use the `session_id` returned from `tidal_login()` and remember it for subsequent calls.
 
 All search functions support up to 50 results per type and return TIDAL URLs for easy access to the content.
 
