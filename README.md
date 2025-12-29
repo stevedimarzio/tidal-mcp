@@ -267,9 +267,10 @@ az containerapp create \
 ```
 
 **Security Best Practices:**
-- Use HTTPS for production deployments
+- Use HTTPS for production deployments (set `HTTPS_ENABLED=true` environment variable)
 - Consider using your cloud provider's network security features (firewalls, VPCs)
 - Monitor server logs for unusual activity
+- For horizontal scaling (multiple instances), enable stateless mode: `FASTMCP_STATELESS_HTTP=true`
 
 ## MCP Client Configuration
 
@@ -464,8 +465,15 @@ Once configured, you can interact with your TIDAL account by asking questions li
 The TIDAL MCP integration provides the following tools:
 
 ### Authentication
-- **`tidal_login(session_id: str | None = None)`**: Start TIDAL authentication flow. Returns the authentication URL immediately (non-blocking) for cloud deployment compatibility. Returns a `session_id` that should be used for subsequent requests. For HTTP endpoints, use `POST /auth/login` which sets a session cookie automatically.
-- **`check_login_status(session_id: str)`**: Check if authentication has completed. Use this after calling `tidal_login()` to poll for completion. For HTTP endpoints, use `GET /auth/status` which reads the session cookie automatically.
+- **`tidal_login(session_id: str | None = None, callback_url: str | None = None)`**: Start TIDAL authentication flow. Returns the authentication URL immediately (non-blocking) for cloud deployment compatibility. Returns a `session_id` that should be used for subsequent requests. If `callback_url` is provided, users will be redirected there after authentication completes. For HTTP endpoints, use `POST /auth/login` with `callback_url` in JSON body, which sets a session cookie automatically.
+- **`check_login_status(session_id: str)`**: Check if authentication has completed. Use this after calling `tidal_login()` to poll for completion. Returns `callback_url` when authentication completes (if provided). For HTTP endpoints, use `GET /auth/status` which reads the session cookie automatically.
+- **`GET /auth/callback?session_id=...`**: Callback endpoint for automatic redirect after authentication. Redirects to the `callback_url` if authentication is complete. Use this to redirect users back to your chat interface.
+
+**Session Features:**
+- Sessions are stored **in-memory** for fast access (1-hour expiry)
+- Sessions are automatically **refreshed** on use (extends expiry)
+- Sessions are **persisted to disk** as backup
+- No repeated login prompts within the 1-hour window
 
 ### Favorites & Recommendations
 - **`get_favorite_tracks(limit: int = 20)`**: Retrieve your favorite tracks from your TIDAL account. Returns track information including ID, title, artist, album, duration, and TIDAL URLs.
