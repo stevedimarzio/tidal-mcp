@@ -24,6 +24,7 @@ try:
         SearchTracksResponse,
         TrackModel,
         TracksResponse,
+        GenresResponse,
     )
     from .utils import (
         TIDAL_PLAYLIST_URL_TEMPLATE,
@@ -31,6 +32,7 @@ try:
         format_album_data,
         format_artist_data,
         format_track_data,
+        format_genre_data,
     )
 except ImportError:
     from interfaces import ISessionManager
@@ -50,6 +52,7 @@ except ImportError:
         SearchTracksResponse,
         TrackModel,
         TracksResponse,
+        GenresResponse,
     )
     from utils import (
         TIDAL_PLAYLIST_URL_TEMPLATE,
@@ -57,6 +60,7 @@ except ImportError:
         format_album_data,
         format_artist_data,
         format_track_data,
+        format_genre_data,
     )
 
 
@@ -323,3 +327,16 @@ class TidalService:
         return SearchArtistsResponse(
             query=query, artists=formatted_artists, total=len(formatted_artists)
         )
+
+    def get_genres(self) -> GenresResponse:
+        """Get available genres from TIDAL."""
+        session = self.session_manager.get_authenticated_session(self._current_session_id)
+        
+        try:
+            genres_raw = session.genres()
+        except Exception as e:
+            logger.error(f"Error fetching genres: {e}")
+            genres_raw = []
+            
+        formatted_genres = [format_genre_data(g) for g in genres_raw]
+        return GenresResponse(genres=formatted_genres, total=len(formatted_genres))

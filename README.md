@@ -187,36 +187,41 @@ For Cursor configuration, use:
 
 The container is designed to work with cloud container services. Here are deployment options:
 
-#### FastMCP Cloud (Recommended)
+#### Prefect Cloud / FastMCP Deploy (Recommended)
 
-FastMCP Cloud provides free hosting for personal MCP servers. To deploy:
+FastMCP is maintained by Prefect. You can deploy and manage your MCP servers natively using Prefect Cloud via FastMCP.
 
-1. **Install FastMCP CLI** (if not already installed):
+1. **Ensure you have FastMCP >= 3.0 installed**:
    ```bash
-   pip install fastmcp
+   uv pip install "fastmcp>=3.0.0"
    ```
 
-2. **Login to FastMCP Cloud**:
+2. **Login to Prefect / FastMCP Cloud**:
    ```bash
+   prefect cloud login
+   # or
    fastmcp cloud login
    ```
 
-3. **Deploy your server**:
+3. **Set your Secrets (if any)**:
+   In your Prefect Cloud workspace, you can define environment variables like `TIDAL_USER_ID` using Prefect Variables or Blocks to be injected during execution.
+
+4. **Deploy your server**:
    ```bash
-   fastmcp cloud deploy
+   fastmcp deploy mcp_server/server.py:mcp
    ```
 
-4. **Get your server URL**:
+5. **Get your server URL**:
    ```bash
    fastmcp cloud status
    ```
 
-5. **Configure your MCP client** to use the FastMCP Cloud URL:
+6. **Configure your MCP client** to use the Cloud URL:
 
 ```json
 {
   "mcpServers": {
-    "TIDAL MCP (FastMCP Cloud)": {
+    "TIDAL MCP (Prefect Cloud)": {
       "url": "https://your-server.fastmcp.cloud/mcp",
       "transport": "sse"
     }
@@ -224,7 +229,7 @@ FastMCP Cloud provides free hosting for personal MCP servers. To deploy:
 }
 ```
 
-For more details, see the [FastMCP Cloud documentation](https://gofastmcp.com/).
+For more details, see the [FastMCP documentation](https://gofastmcp.com/).
 
 #### Generic Cloud Container Services
 

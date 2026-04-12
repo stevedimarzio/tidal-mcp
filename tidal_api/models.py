@@ -364,3 +364,18 @@ class TopTracksResponse(BaseModel):
     total: int = Field(..., ge=0, description="Total number of tracks returned")
     date_from: datetime | None = Field(None, description="Start date of the period")
     date_to: datetime | None = Field(None, description="End date of the period")
+
+
+class GenreModel(BaseModel):
+    """Model representing a TIDAL genre."""
+
+    name: str = Field(..., description="Genre name")
+    path: str = Field(..., description="Genre path")
+    url: HttpUrl | None = Field(None, description="TIDAL genre URL")
+
+
+class GenresResponse(BaseModel):
+    """Response model for genres endpoint."""
+
+    genres: list[GenreModel] = Field(..., description="List of genres")
+    total: int = Field(..., ge=0, description="Total number of genres returned")

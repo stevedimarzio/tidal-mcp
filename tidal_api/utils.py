@@ -6,6 +6,7 @@ try:
         PlaybackHistoryItem,
         RecentlyPlayedItem,
         TrackModel,
+        GenreModel,
     )
 except ImportError:
     from models import (
@@ -14,6 +15,7 @@ except ImportError:
         PlaybackHistoryItem,
         RecentlyPlayedItem,
         TrackModel,
+        GenreModel,
     )
 
 # Constants
@@ -324,3 +326,25 @@ def bound_limit(limit: int, max_n: int = 50) -> int:
         limit = max_n
     # Note: Logging removed here to avoid noise - limit validation is sufficient
     return limit
+
+
+def format_genre_data(genre) -> GenreModel:
+    """
+    Format a genre object into a GenreModel.
+    
+    Args:
+        genre: TIDAL genre object
+        
+    Returns:
+        GenreModel with standardized genre information
+    """
+    genre_name = _safe_get_attr(genre, "name", "Unknown Genre")
+    genre_path = _safe_get_attr(genre, "path", "")
+    
+    url = f"{TIDAL_BASE_URL}/browse/{genre_path}" if genre_path else None
+    
+    return GenreModel(
+        name=genre_name,
+        path=genre_path,
+        url=url,
+    )

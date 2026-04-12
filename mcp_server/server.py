@@ -878,5 +878,48 @@ def search_tidal_artists(query: str, limit: int = 20, session_id: str | None = N
         return {"status": "error", "message": f"Artist search failed: {str(e)}"}
 
 
+@mcp.tool()
+def explore_tidal_genres(session_id: str | None = None) -> dict:
+    """
+    Explore available music genres on TIDAL.
+
+    USE THIS TOOL WHENEVER A USER ASKS FOR:
+    - "What genres does TIDAL have?"
+    - "Show me TIDAL genres"
+    - "Explore genres"
+    - A list of genres they can search or use for filtering recommendations
+
+    This function retrieves the list of standard catalog genres available in TIDAL.
+
+    When processing the results of this tool:
+    1. Present genres in a clear list.
+    2. Give the user the name of the genre and any path/URL so they can potentially use it in search.
+    
+    Args:
+        session_id: Optional session ID. If not provided, checks TIDAL_USER_ID environment variable.
+
+    Returns:
+        A dictionary containing available genres.
+    """
+    _get_session_id_for_tool(session_id)
+    auth_status = container.session_manager.check_authentication_status(session_id)
+    if not auth_status.get("authenticated", False):
+        return {
+            "status": "error",
+            "message": "You need to login to TIDAL first. Please use the tidal_login() function.",
+        }
+
+    try:
+        response = container.tidal_service.get_genres()
+        return {
+            "status": "success",
+            "genres": [genre.model_dump() for genre in response.genres],
+            "total": response.total,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching genres: {e}", exc_info=True)
+        return {"status": "error", "message": f"Failed to get genres: {str(e)}"}
+
+
 # Server can be run using: fastmcp run mcp_server/server.py --host 0.0.0.0 --port 8080
 # FastMCP CLI automatically detects the 'mcp' object and runs it
