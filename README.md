@@ -25,7 +25,7 @@ Built with **FastMCP 3.0**, this server provides a robust integration with TIDAL
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yuhuacheng/tidal-mcp.git
+   git clone https://github.com/stevedimarzio/tidal-mcp.git
    cd tidal-mcp
    ```
 
