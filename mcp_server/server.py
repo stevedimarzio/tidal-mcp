@@ -1,18 +1,44 @@
+import os
 import uuid
 
 from fastmcp import FastMCP
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from mcp_server.logger import logger
 from mcp_server.wireup_config import container
 
+class APIKeyMiddleware(BaseHTTPMiddleware):
+    """Middleware for API key authentication via X-API-KEY header."""
+    async def dispatch(self, request: Request, call_next):
+        # Bypass authentication for health check
+        if request.url.path == "/health":
+            return await call_next(request)
+
+        expected_key = os.getenv("API_KEY")
+        if not expected_key:
+            # If no API_KEY is configured, allow the request
+            # In production, this should always be set
+            return await call_next(request)
+
+        api_key = request.headers.get("X-API-KEY")
+        if api_key != expected_key:
+            logger.warning(f"Unauthorized access attempt from {request.client.host if request.client else 'unknown'}")
+            return JSONResponse(
+                {"status": "error", "message": "Unauthorized: Invalid or missing API Key"},
+                status_code=401
+            )
+
+        return await call_next(request)
+
 mcp = FastMCP("TIDAL MCP")
 logger.info("TIDAL MCP server initialized")
 
 
 @mcp.custom_route("/health", methods=["GET"])
-async def health_check(request):
+async def health_check(request: Request):
     """Health check endpoint for monitoring and load balancers."""
     return JSONResponse({"status": "healthy", "service": "tidal-mcp"})
 
@@ -920,6 +946,10 @@ def explore_tidal_genres(session_id: str | None = None) -> dict:
         logger.error(f"Error fetching genres: {e}", exc_info=True)
         return {"status": "error", "message": f"Failed to get genres: {str(e)}"}
 
+
+# Create ASGI application with middleware
+# The 'app' object can be run with uvicorn: uvicorn mcp_server.server:app
+app = mcp.http_app(middleware=[Middleware(APIKeyMiddleware)])
 
 # Server can be run using: fastmcp run mcp_server/server.py --host 0.0.0.0 --port 8080
 # FastMCP CLI automatically detects the 'mcp' object and runs it

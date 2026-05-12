@@ -1,545 +1,136 @@
-# TIDAL MCP: My Custom Picks 🌟🎧
+# TIDAL MCP 🌟🎧
 
-![Demo: Music Recommendations in Action](./assets/tidal_mcp_demo.gif)
+Standalone MCP server for integrating TIDAL services with compatible LLMs (Claude, Mistral, Cursor, etc.).
 
-Most music platforms offer recommendations — Daily Discovery, Top Artists, New Arrivals, etc. — but even with the state-of-the-art system, they often feel too "aggregated". I wanted something more custom and context-aware.
+Built with **FastMCP 3.0**, this server provides a robust integration with TIDAL's API, allowing your AI assistant to manage your music library, discover new tracks, and create personalized playlists.
 
-With TIDAL MCP, you can ask for things like:
-> *"Based on my last 10 favorites, find similar tracks — but only ones from recent years."*
->
-> *"Find me tracks like those in this playlist, but slower and more acoustic."*
+## 🚀 Features
 
-The LLM filters and curates results using your input, finds similar tracks via TIDAL’s API, and builds new playlists directly in your account.
+- 🔐 **OAuth2 Authentication**: Secure browser-based login flow with session persistence.
+- 🌟 **Music Recommendations**: Personalized track suggestions based on your favorites or specific seeds.
+- 📋 **Playlist Management**: Create, view, browse, and delete TIDAL playlists directly from your chat.
+- 🔍 **Music Search**: Comprehensive search for tracks, albums, and artists in TIDAL's vast catalog.
+- ❤️ **Favorites Access**: Quick access to your favorite tracks and artists.
+- 🎵 **Genre Exploration**: Browse and explore TIDAL genres for targeted discovery.
+- 🛡️ **API Security**: Optional `X-API-KEY` header validation for secure remote access.
+- ⚡ **HTTP/SSE Transport**: High-performance transport layer via ASGI (Uvicorn).
 
-<a href="https://glama.ai/mcp/servers/@yuhuacheng/tidal-mcp">
-  <img width="400" height="200" src="https://glama.ai/mcp/servers/@yuhuacheng/tidal-mcp/badge" alt="TIDAL: My Custom Picks MCP server" />
-</a>
+## 🛠️ Prerequisites
 
-## Features
+- **Python 3.10+**
+- **[uv](https://github.com/astral-sh/uv)** (highly recommended Python package manager)
+- **TIDAL Subscription** (required for API access)
 
-- 🔐 **OAuth2 Authentication**: Secure browser-based login flow with cloud deployment support. Returns auth URL immediately for remote access.
-- 🌟 **Music Recommendations**: Get personalized track recommendations based on your favorites or specific tracks, with custom filtering criteria
-- 📋 **Playlist Management**: Create, view, browse, and delete your TIDAL playlists
-- 🔍 **Music Search**: Search TIDAL's catalog for tracks, albums, and artists
-- ❤️ **Favorites Access**: Retrieve and explore your favorite tracks
-- 🐳 **Docker Support**: Run in containers with health checks for cloud deployment
+## 📥 Installation
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- [uv](https://github.com/astral-sh/uv) (Python package manager)
-- TIDAL subscription
-
-### Installation
-
-1. Clone this repository:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/yuhuacheng/tidal-mcp.git
    cd tidal-mcp
    ```
 
-2. Install dependencies using uv (no need to create a virtual environment manually):
+2. **Install dependencies:**
    ```bash
    uv pip install --editable .
    ```
 
-   This will install all dependencies defined in the pyproject.toml file and set up the project in development mode.
+## 🏃 Running Locally
 
-### Running the Server
-
-To run the MCP server in HTTP mode:
+To run the TIDAL MCP server in HTTP mode:
 
 ```bash
+export API_KEY=your_secret_key  # Optional: Protects your server
 uv run fastmcp run mcp_server/server.py --host 127.0.0.1 --port 8080 --transport http
 ```
 
-Or for production (accepting connections from all interfaces):
+The server will be available at `http://127.0.0.1:8080/mcp`.
 
-```bash
-uv run fastmcp run mcp_server/server.py --host 0.0.0.0 --port 8080 --transport http
-```
+## 🤖 MCP Client Configuration
 
-**Note:** Always use `uv run` to ensure all dependencies are available in the correct environment.
+### Claude Desktop (Mac)
 
-The server will be available at `http://127.0.0.1:8080` by default. Use `--host` and `--port` flags to customize the binding address and port.
-
-### Running with Docker
-
-You can also run the TIDAL MCP server using Docker, which simplifies deployment and ensures consistent environments.
-
-#### Prerequisites
-
-- Docker and Docker Compose installed
-- TIDAL subscription
-
-#### Building the Docker Image
-
-**For local development:**
-```bash
-docker build -t tidal-mcp:latest .
-```
-
-**For cloud deployment (linux/amd64):**
-For cloud platforms that require `linux/amd64` architecture, build with the correct platform:
-
-```bash
-docker buildx build --platform linux/amd64 -t tidal-mcp:latest .
-```
-
-Or use the task command:
-```bash
-task docker-build-cloud
-```
-
-**⚠️ Important:** If you're building on Apple Silicon (M1/M2/M3 Mac), you must specify `--platform linux/amd64` for cloud deployment, otherwise you'll get an "exec format error".
-
-#### Running with Docker
-
-**Option 1: Using Docker Compose (Recommended)**
-
-The easiest way to run the server is using Docker Compose:
-
-```bash
-docker compose up
-```
-
-Or use the task command:
-
-```bash
-task docker-dev
-```
-
-This will:
-- Build the image if it doesn't exist
-- Start the server in HTTP mode on port 8080
-- Mount the sessions directory for session persistence (stored in `~/.tidal-mcp/sessions`)
-- Run health checks using curl (as cloud services do)
-
-To run in detached mode:
-
-```bash
-docker compose up -d
-```
-
-To stop the server:
-
-```bash
-docker compose down
-```
-
-**Option 2: Using Docker directly**
-
-Run the container:
-
-```bash
-docker run -p 8080:8080 \
-  -v tidal-mcp-sessions:/home/appuser/.tidal-mcp/sessions \
-  tidal-mcp:latest
-```
-
-#### Environment Variables
-
-You can customize the server behavior using environment variables:
-
-- `PORT`: Port for the MCP HTTP server (default: `8080`)
-- `HOST`: Host to bind to (default: `0.0.0.0` for Docker)
-
-Example with custom port:
-
-```bash
-docker run -p 9000:9000 \
-  -e PORT=9000 \
-  -e HOST=0.0.0.0 \
-  -v tidal-mcp-sessions:/home/appuser/.tidal-mcp/sessions \
-  tidal-mcp:latest
-```
-
-Or with docker-compose, modify the `environment` section in `docker-compose.yml`.
-
-#### Volume Mounts
-
-Sessions are stored in `~/.tidal-mcp/sessions` (or `/home/appuser/.tidal-mcp/sessions` in Docker containers). The sessions directory is mounted as a volume to persist TIDAL authentication sessions across container restarts. This ensures you don't need to re-authenticate every time the container is restarted.
-
-#### Connecting to the Docker Container
-
-When running in HTTP mode, connect your MCP client to:
-
-```
-http://localhost:8080/mcp
-```
-
-For Cursor configuration, use:
+To integrate with Claude Desktop, add the following to your configuration file (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
-    "TIDAL MCP (Docker)": {
-      "url": "http://localhost:8080/mcp",
-      "transport": "sse"
-    }
-  }
-}
-```
-
-### Cloud Deployment
-
-The container is designed to work with cloud container services. Here are deployment options:
-
-#### Prefect Cloud / FastMCP Deploy (Recommended)
-
-FastMCP is maintained by Prefect. You can deploy and manage your MCP servers natively using Prefect Cloud via FastMCP.
-
-1. **Ensure you have FastMCP >= 3.0 installed**:
-   ```bash
-   uv pip install "fastmcp>=3.0.0"
-   ```
-
-2. **Login to Prefect / FastMCP Cloud**:
-   ```bash
-   prefect cloud login
-   # or
-   fastmcp cloud login
-   ```
-
-3. **Set your Secrets (if any)**:
-   In your Prefect Cloud workspace, you can define environment variables like `TIDAL_USER_ID` using Prefect Variables or Blocks to be injected during execution.
-
-4. **Deploy your server**:
-   ```bash
-   fastmcp deploy mcp_server/server.py:mcp
-   ```
-
-5. **Get your server URL**:
-   ```bash
-   fastmcp cloud status
-   ```
-
-6. **Configure your MCP client** to use the Cloud URL:
-
-```json
-{
-  "mcpServers": {
-    "TIDAL MCP (Prefect Cloud)": {
-      "url": "https://your-server.fastmcp.cloud/mcp",
-      "transport": "sse"
-    }
-  }
-}
-```
-
-For more details, see the [FastMCP documentation](https://gofastmcp.com/).
-
-#### Generic Cloud Container Services
-
-The container can be deployed to any cloud container service (AWS ECS, Azure Container Apps, etc.):
-
-**Key Configuration:**
-- Set `PORT=8080` (or let the service auto-detect)
-- Expose port 8080
-- The `/health` endpoint is available for health checks
-
-**Example for AWS ECS / Fargate:**
-
-```json
-{
-  "containerDefinitions": [{
-    "name": "tidal-mcp",
-    "image": "your-ecr-repo/tidal-mcp:latest",
-    "environment": [
-      {
-        "name": "PORT",
-        "value": "8080"
+    "tidal": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with", "fastmcp",
+        "fastmcp", "run",
+        "mcp_server/server.py",
+        "--host", "127.0.0.1",
+        "--port", "8080",
+        "--transport", "http"
+      ],
+      "env": {
+        "API_KEY": "your_secret_key",
+        "TIDAL_USER_ID": "your_default_user_name"
       }
-    ],
-    "portMappings": [{
-      "containerPort": 8080
-    }]
-  }]
+    }
+  }
 }
 ```
 
-**Example for Azure Container Apps:**
+### Mistral AI (Le Chat)
 
-```bash
-az containerapp create \
-  --name tidal-mcp \
-  --resource-group your-resource-group \
-  --image your-registry.azurecr.io/tidal-mcp:latest \
-  --target-port 8080 \
-  --env-vars PORT=8080
-```
+TIDAL MCP works seamlessly with Mistral's Custom MCP Connectors:
 
-**Security Best Practices:**
-- Use HTTPS for production deployments
-- Consider using your cloud provider's network security features (firewalls, VPCs)
-- Monitor server logs for unusual activity
+1. **Expose your server**: Use a tool like `ngrok` or deploy to a cloud provider to get a public HTTPS URL.
+2. **Add Connector**:
+   - Go to **Mistral AI > Intelligence > Connectors**.
+   - Click **+ Add Connector** and select **Custom MCP Connector**.
+   - **Name**: `TIDAL`
+   - **URL**: `https://your-public-domain.com/mcp`
+   - **Headers**: Add `X-API-KEY: your_secret_key` if configured.
+3. **Connect**: Click connect and verify the status is **Active**.
 
-## MCP Client Configuration
+### Cursor
 
-### Cursor Configuration (HTTP Mode for Debugging)
+Add a new MCP server in Cursor settings:
+- **Type**: `SSE`
+- **URL**: `http://127.0.0.1:8080/mcp`
 
-To use the MCP server with Cursor in HTTP mode for debugging:
+## ⚙️ Environment Variables
 
-1. **Start the server in HTTP mode:**
-   
-   **Option A: Local development:**
-   ```bash
-   uv run fastmcp run mcp_server/server.py --host 127.0.0.1 --port 8080 --transport http
-   ```
-   
-   Or use the task command:
-   ```bash
-   task dev
-   ```
-   
-   **Option B: With Docker:**
-   ```bash
-   docker compose up
-   # or
-   task docker-dev
-   ```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_KEY` | Secret key for `X-API-KEY` header validation. | None (disabled) |
+| `TIDAL_USER_ID` | Default session ID/username to use for authentication. | None |
+| `TIDAL_STORAGE_ENCRYPTION_KEY` | Key used to encrypt stored session data. | None |
+| `PORT` | Port for the HTTP server. | 8080 |
 
-2. **Configure Cursor:**
-   - Open Cursor Settings
-   - Navigate to MCP/Model Context Protocol settings
-   - Add the following configuration:
-   
-   ```json
-   {
-     "mcpServers": {
-       "TIDAL MCP (HTTP)": {
-         "url": "http://127.0.0.1:8080/mcp",
-         "transport": "sse"
-       }
-     }
-   }
-   ```
-
-3. **Restart Cursor** and verify the connection
-
-For detailed instructions and troubleshooting, see the [HTTP Debug Setup Guide](docs/HTTP_DEBUG_SETUP.md).
-
-### Mistral Configuration (Remote Server via Connectors)
-
-To integrate a remote `tidal-mcp` server with Mistral AI using connectors, follow these steps:
-
-#### Prerequisites
-
-1. **Deploy your TIDAL MCP server** to a publicly accessible URL (e.g., FastMCP Cloud, ECS, Azure Container Apps, or any HTTPS endpoint)
-2. **Note your server URL** - it should be in the format: `https://your-domain.com/mcp` or `https://your-server.fastmcp.cloud/mcp`
-
-#### Step 1: Access Connectors in Mistral
-
-1. Open Mistral AI (le Chat)
-2. Click the **toggle panel button** (☰) to reveal the side panel
-3. Expand the **Intelligence** menu
-4. Select **Connectors**
-
-#### Step 2: Add Custom MCP Connector
-
-1. Click the **+ Add Connector** button
-2. Switch to the **Custom MCP Connector** tab
-
-#### Step 3: Configure the Connector
-
-Fill in the connector configuration with the following details:
-
-- **Connector Name**: `TIDAL MCP` (or any name you prefer)
-- **Connection Server**: Enter your full server URL with the `/mcp` endpoint:
-  ```
-  https://your-domain.com/mcp
-  ```
-  Or for FastMCP Cloud:
-  ```
-  https://your-server.fastmcp.cloud/mcp
-  ```
-- **Description** (optional): `TIDAL music integration for recommendations, playlists, and search`
-
-**Example Configuration:**
-
-If Mistral uses a JSON configuration format, use:
-
-```json
-{
-  "name": "TIDAL MCP",
-  "url": "https://your-server.fastmcp.cloud/mcp",
-  "transport": "sse"
-}
-```
-
-#### Step 4: Connect and Verify
-
-1. Click the **Connect** button
-2. Wait for Mistral to establish the connection
-3. Verify the connection status shows as **Connected** or **Active**
-
-#### Step 5: Use the Connector in Conversations
-
-1. Start a new conversation in Mistral
-2. Click the **Tools** button below the input box
-3. Under the **Connectors** section, ensure **TIDAL MCP** is selected/enabled
-4. You can now ask questions like:
-   - *"Help me log in to TIDAL"*
-   - *"Show me my favorite tracks"*
-   - *"Recommend songs similar to my favorites"*
-
-#### Troubleshooting
-
-**Connection fails:**
-- Verify your server URL is correct and includes `/mcp` endpoint
-- Ensure your server is publicly accessible (not behind a firewall)
-- Verify the server is running and responding to health checks: `curl https://your-domain.com/health`
-
-**"Request validation failed" error:**
-- This error typically occurs when uvicorn's proxy headers middleware isn't configured to trust the proxy
-- The Docker image is configured with `--forwarded-allow-ips='*'` by default to handle proxy headers
-- If you're still experiencing this error, ensure you're using the latest Docker image version
-- You can override the forwarded IPs configuration via the `FORWARDED_ALLOW_IPS` environment variable if needed
-
-
-**Tools not appearing:**
-- Make sure the connector is enabled in the Tools menu for your conversation
-- Try disconnecting and reconnecting the connector
-- Check Mistral's connector logs for any error messages
-
-**Server not responding:**
-- Verify your server is deployed and running
-- Check cloud service logs for errors
-- Test the `/health` endpoint directly: `curl https://your-domain.com/health`
-- Ensure your server supports SSE (Server-Sent Events) transport
-
-#### Security Best Practices
-
-- **Use HTTPS**: Always use HTTPS URLs for remote connections (never HTTP)
-- **Monitor Access**: Review your server logs to monitor connector usage
-- **Restrict Access**: Consider IP whitelisting if your cloud provider supports it
-
-#### Example: FastMCP Cloud Deployment for Mistral
-
-If deploying to FastMCP Cloud for Mistral:
-
-```bash
-# Deploy with FastMCP Cloud
-fastmcp cloud deploy
-
-# Get your server URL
-fastmcp cloud status
-```
-
-Then use the FastMCP Cloud URL in Mistral:
-```
-https://your-server.fastmcp.cloud/mcp
-```
-
-## Usage Examples
-
-Once configured, you can interact with your TIDAL account by asking questions like:
-
-### Getting Started
-- *"Help me log in to TIDAL"*
-- *"Show me my favorite tracks"*
-- *"What playlists do I have?"*
-
-### Recommendations
-- *"Recommend songs like those in my 'Chill Vibes' playlist, but slower and more acoustic."*
-- *"Create a playlist based on my top 20 favorite tracks, but focused on chill, late-night vibes."*
-- *"Find songs similar to my favorites but from recent years (2020-2024)."*
-- *"Recommend upbeat tracks similar to my current favorites."*
-
-### Playlist Management
-- *"Show me all the tracks in my 'Workout Mix' playlist"*
-- *"Create a new playlist called 'Study Focus' with relaxing instrumental tracks"*
-- *"Delete my 'Old Mix' playlist"*
-
-### Search
-- *"Search for tracks by Radiohead"*
-- *"Find albums by D'Angelo"*
-- *"Search for the artist 'Kendrick Lamar'"*
-
-*💡 Tips:*
-- Use more tracks as seeds to broaden recommendations
-- Ask for more recommendations if you want a longer playlist
-- You can combine search with recommendations for more targeted results
-- Delete playlists anytime if you're not satisfied — no pressure!
-
-## Available Tools
-
-The TIDAL MCP integration provides the following tools:
+## 🛠️ Available Tools
 
 ### Authentication
-- **`tidal_login(session_id: str | None = None)`**: Start TIDAL authentication flow. Returns the authentication URL immediately (non-blocking) for cloud deployment compatibility. Returns a `session_id` that should be remembered and used for subsequent requests. If `session_id` is not provided, checks `TIDAL_USER_ID` environment variable, otherwise generates a new UUID.
-- **`check_login_status(session_id: str)`**: Check if authentication has completed. Use this after calling `tidal_login()` to poll for completion.
-- **`list_tidal_sessions()`**: List all available sessions. Helps discover session_id if forgotten.
-- **`get_tidal_session_info(session_id: str)`**: Get detailed information about a specific session including authentication status and user details.
+- `tidal_login`: Start the TIDAL OAuth2 flow. Returns a URL for browser login.
+- `check_login_status`: Verify if the authentication process is complete.
+- `list_tidal_sessions`: List all stored authentication sessions.
+- `get_tidal_session_info`: Get details about a specific session.
 
-### Favorites & Recommendations
-- **`get_favorite_tracks(limit: int = 20)`**: Retrieve your favorite tracks from your TIDAL account. Returns track information including ID, title, artist, album, duration, and TIDAL URLs.
-- **`recommend_tracks(track_ids: list[str] | None = None, filter_criteria: str | None = None, limit_per_track: int = 20, limit_from_favorite: int = 20)`**: Get personalized music recommendations based on:
-  - Your favorite tracks (if no track IDs provided)
-  - Specific track IDs you provide
-  - Optional filtering criteria (e.g., "relaxing", "recent releases", "upbeat", "jazz influences")
-  - Returns seed tracks and recommended tracks with full metadata
-
-### Playlist Management
-- **`create_tidal_playlist(title: str, track_ids: list, description: str = "", session_id: str | None = None)`**: Create a new playlist in your TIDAL account with specified tracks. Returns playlist details including TIDAL URL.
-- **`get_user_playlists(session_id: str | None = None)`**: List all your playlists on TIDAL, sorted by last updated date (most recent first). Returns playlist metadata including title, track count, and TIDAL URLs.
-- **`get_playlist_tracks(playlist_id: str, limit: int = 100, session_id: str | None = None)`**: Retrieve all tracks from a specific playlist. Returns track information with full metadata.
-- **`delete_tidal_playlist(playlist_id: str, session_id: str | None = None)`**: Delete a playlist from your TIDAL account by its ID.
+### Music Discovery & Library
+- `get_favorite_tracks`: Retrieve your favorite tracks.
+- `recommend_tracks`: Get personalized recommendations (minimum 20 tracks suggested).
+- `explore_tidal_genres`: Browse available music genres on TIDAL.
 
 ### Search
-- **`search_tidal(query: str, limit: int = 20, search_types: str | None = "tracks,albums,artists", session_id: str | None = None)`**: General search function that can search for tracks, albums, and/or artists. You can specify which types to search (e.g., "tracks", "albums,artists", or all three).
-- **`search_tidal_tracks(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for tracks. Returns matching tracks with full metadata and TIDAL URLs.
-- **`search_tidal_albums(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for albums. Returns matching albums with artist, release date, track count, and TIDAL URLs.
-- **`search_tidal_artists(query: str, limit: int = 20, session_id: str | None = None)`**: Search specifically for artists. Returns matching artists with TIDAL URLs.
+- `search_tidal`: Search for tracks, albums, and artists.
+- `search_tidal_tracks`: Search specifically for tracks.
+- `search_tidal_albums`: Search specifically for albums.
+- `search_tidal_artists`: Search specifically for artists.
 
-## Multi-User Session Management
+### Playlist Management
+- `create_tidal_playlist`: Create a new playlist with specific tracks.
+- `get_user_playlists`: List all your TIDAL playlists.
+- `get_playlist_tracks`: Get all tracks from a specific playlist.
+- `delete_tidal_playlist`: Delete a playlist from your account.
 
-The TIDAL MCP server supports multiple concurrent users, each with their own session. Here's how it works:
+## 📝 Multi-User Support
 
-### Session Workflow for Chat Applications
+The server supports multiple concurrent users via `session_id`. Each user's authentication state is stored securely in `~/.tidal-mcp/sessions`. When using in a multi-user environment, ensure `TIDAL_STORAGE_ENCRYPTION_KEY` is set to protect user tokens.
 
-1. **First Authentication:**
-   - User calls `tidal_login()` (optionally with a `session_id`)
-   - Returns `auth_url` and `session_id`
-   - **Important:** The AI assistant should remember the `session_id` in conversation context
-   - User visits `auth_url` to complete TIDAL authentication
+## 📄 License
 
-2. **Subsequent Requests:**
-   - All TIDAL tools accept an optional `session_id` parameter
-   - AI assistant includes the remembered `session_id` in all tool calls
-   - Sessions persist across conversations - users only authenticate once per `session_id`
-
-3. **Multiple Users:**
-   - Each user gets their own `session_id` from `tidal_login()`
-   - Sessions are stored in DiskStore at `~/.tidal-mcp/sessions` (encrypted)
-   - Use `list_tidal_sessions()` to see all available sessions
-   - Use `get_tidal_session_info(session_id)` to check a specific session
-
-### Environment Variable Support
-
-For containerized deployments, you can set `TIDAL_USER_ID` environment variable:
-- When `session_id` is not provided, the system checks `TIDAL_USER_ID`
-- If set, uses `TIDAL_USER_ID` as the default session_id
-- Allows per-user default sessions in multi-user deployments
-- Explicit `session_id` parameter always takes precedence
-
-### HTTP Endpoints
-
-HTTP endpoints (`POST /auth/login` and `GET /auth/status`) accept `session_id`:
-- **POST /auth/login**: Send `{"session_id": "..."}` in JSON body (optional, generates new if not provided)
-- **GET /auth/status**: Use `?session_id=...` query parameter (required)
-
-**Note:** All tools accept an optional `session_id` parameter. If not provided, checks `TIDAL_USER_ID` environment variable. For chat applications, it's recommended to use the `session_id` returned from `tidal_login()` and remember it for subsequent calls.
-
-All search functions support up to 50 results per type and return TIDAL URLs for easy access to the content.
-
-## License
-
-[MIT License](LICENSE)
-
-## Acknowledgements
-
-- [Model Context Protocol (MCP)](https://github.com/modelcontextprotocol/python-sdk)
-- [TIDAL Python API](https://github.com/tamland/python-tidal)
+MIT License - see [LICENSE](LICENSE) for details.
